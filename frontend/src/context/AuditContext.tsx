@@ -38,6 +38,7 @@ export interface AuditRecord {
   pages: PageRecord[];
   historyScores: { timestamp: string; uxScore: number; a11yScore: number }[];
   resolvedIssuesCount: number;
+  topImprovements?: any[];
 }
 
 export interface PageRecord {
