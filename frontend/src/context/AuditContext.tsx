@@ -58,12 +58,22 @@ export interface PageRecord {
 
 export interface IssueRecord {
   id: string;
+  page_url: string;
+  element_selector: string;
+  issue_type: string;
   severity: 'Critical' | 'Warning' | 'Minor';
-  standard?: string; // for accessibility (WCAG)
-  heuristic?: string; // for UX (Nielsen)
+  proof_source: ('DOM' | 'AXE' | 'VISION')[];
+  evidence_snippet: string;
+  before_html: string;
+  recommended_fix: string;
+  ux_reasoning: string;
+
+  // Backwards compatibility mappings
   element?: string;
   description: string;
   recommendation: string;
+  standard?: string;
+  heuristic?: string;
 }
 
 export interface PersonaRecord {

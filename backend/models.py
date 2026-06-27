@@ -4,12 +4,22 @@ from typing import List, Optional
 
 class IssueRecord(BaseModel):
     id: str
+    page_url: str
+    element_selector: str
+    issue_type: str
     severity: str  # Critical | Warning | Minor
+    proof_source: List[str]  # ["DOM", "AXE", "VISION"]
+    evidence_snippet: str
+    before_html: str
+    recommended_fix: str
+    ux_reasoning: str
+
+    # Backwards compatibility mappings
+    element: Optional[str] = None
+    description: Optional[str] = None
+    recommendation: Optional[str] = None
     standard: Optional[str] = None
     heuristic: Optional[str] = None
-    element: Optional[str] = None
-    description: str
-    recommendation: str
 
 
 class BoundingBoxRecord(BaseModel):
