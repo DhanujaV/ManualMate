@@ -1,11 +1,12 @@
 """
-UXVerse AI — Playwright BFS Crawler
-Crawls every reachable internal page using Breadth-First Search.
-Falls back to requests+BeautifulSoup when Playwright is unavailable.
+UXVerse AI — Playwright BFS Crawler (Advanced SEO & Canonical Deduplication)
+Crawls unique user-accessible pages using Playwright browser navigation.
+Respects canonical tags, ignores asset, framework, API, auth, and parameter variations.
 """
 import asyncio
 import base64
 import logging
+import os
 import re
 import time
 import urllib.parse
@@ -16,24 +17,48 @@ from bs4 import BeautifulSoup
 
 logger = logging.getLogger("uxverse.crawler")
 
-SKIP_PATTERNS = re.compile(
-    r"(/logout|/signout|/sign-out|/log-out|/delete-account"
-    r"|\.(pdf|doc|docx|xls|xlsx|zip|tar|gz|exe|dmg|pkg"
-    r"|mp4|mp3|wav|ogg|webm|jpg|jpeg|png|gif|webp|svg|ico"
-    r"|css|js|woff|woff2|ttf|eot|map)$"
-    r"|#|javascript:|mailto:|tel:|ftp:|data:)",
-    re.IGNORECASE,
-)
-
-
-# ─── Helpers ──────────────────────────────────────────────────────────────────
+# --- Helpers ---
 
 def normalize_url(url: str, base: str) -> Optional[str]:
+    """
+    Normalizes URLs by:
+    - Resolving relative paths against the base URL.
+    - Stripping trailing slashes (except root).
+    - Removing fragments (#section).
+    - Removing tracking parameters (utm_*).
+    - Removing pagination parameters (?page=2).
+    - Removing sorting/filter parameters (sort, filter, category, tag).
+    - Removing infinite calendar date parameters.
+    - Ordering remaining parameters alphabetically for consistent hashing.
+    """
     try:
         full = urllib.parse.urljoin(base, url)
         p = urllib.parse.urlparse(full)
-        # Strip fragment, strip trailing slash (for dedup), keep query only for non-hash links
-        clean = urllib.parse.urlunparse((p.scheme, p.netloc, p.path.rstrip("/") or "/", "", p.query, ""))
+        
+        # Clean path: strip trailing slashes (except root)
+        path = p.path.rstrip("/") or "/"
+        
+        cleaned_query = ""
+        if p.query:
+            params = urllib.parse.parse_qsl(p.query)
+            ignore_keys = {
+                "page", "p", "sort", "orderby", "order", "filter", 
+                "category", "cat", "tag", "date", "month", "year", "day"
+            }
+            cleaned_params = []
+            for k, v in params:
+                kl = k.lower()
+                # Ignore utm_* and keys in ignore_keys
+                if kl.startswith("utm_") or kl in ignore_keys:
+                    continue
+                cleaned_params.append((k, v))
+            if cleaned_params:
+                # Sort parameters for consistent URL uniqueness
+                cleaned_params.sort(key=lambda x: x[0])
+                cleaned_query = urllib.parse.urlencode(cleaned_params)
+
+        netloc = p.netloc.lower()
+        clean = urllib.parse.urlunparse((p.scheme, netloc, path, "", cleaned_query, ""))
         return clean
     except Exception:
         return None
@@ -42,9 +67,87 @@ def normalize_url(url: str, base: str) -> Optional[str]:
 def is_internal(url: str, base_netloc: str) -> bool:
     try:
         p = urllib.parse.urlparse(url)
-        return p.netloc == base_netloc or p.netloc == "" or p.netloc.endswith("." + base_netloc)
+        netloc = p.netloc.lower()
+        base = base_netloc.lower()
+        return netloc == base or netloc == "" or netloc.endswith("." + base)
     except Exception:
         return False
+
+
+def should_ignore_url(url: str, start_url: str, base_netloc: str) -> bool:
+    """
+    Ignore criteria:
+    - External domains.
+    - Asset extensions (images, zip, pdf, css, js).
+    - API paths (/api/*, /graphql, /rpc).
+    - Framework paths (/_next/*, /static/*, /assets/*, /build/*, /dist/*).
+    - Auth routes unless it is the start URL.
+    - Infinite calendar / date patterns.
+    """
+    try:
+        norm = normalize_url(url, start_url)
+        if not norm:
+            return True
+            
+        p = urllib.parse.urlparse(norm)
+        
+        # 1. External domains
+        if not is_internal(norm, base_netloc):
+            return True
+            
+        path = p.path or "/"
+        path_lower = path.lower().rstrip("/")
+        if not path_lower:
+            path_lower = "/"
+            
+        # If this URL is exactly the start URL path, do not ignore it even if it contains auth keywords
+        start_p = urllib.parse.urlparse(start_url)
+        start_path_norm = start_p.path.lower().rstrip("/") or "/"
+        if path_lower == start_path_norm:
+            return False
+
+        # 2. Asset extensions
+        asset_exts = {
+            ".png", ".jpg", ".jpeg", ".svg", ".gif", ".css", ".js", ".woff", ".woff2", ".ico", ".pdf", ".zip",
+            ".doc", ".docx", ".xls", ".xlsx", ".tar", ".gz", ".exe", ".dmg", ".pkg", ".mp4", ".mp3", ".wav", ".ogg",
+            ".webm", ".webp", ".map", ".xml", ".json", ".txt"
+        }
+        _, ext = os.path.splitext(path.lower())
+        if ext in asset_exts:
+            return True
+            
+        # 3. Ignore API routes
+        if path_lower.startswith("/api") or "/api/" in path_lower or path_lower in ("/graphql", "/rpc"):
+            return True
+            
+        # 4. Ignore Framework routes
+        framework_prefixes = ("/_next", "/static", "/assets", "/build", "/dist")
+        for pref in framework_prefixes:
+            if path_lower.startswith(pref) or f"/{pref.lstrip('/')}/" in path_lower:
+                return True
+                
+        # 5. Ignore Authentication routes (ignore unless requested via start_url)
+        auth_routes = ("/login", "/logout", "/signin", "/signup", "/register", "/forgot-password", "/sign-out", "/log-out", "/delete-account")
+        for auth in auth_routes:
+            if path_lower.endswith(auth) or f"{auth}/" in path_lower:
+                return True
+
+        # 6. Ignore infinite calendar/date patterns in path
+        calendar_patterns = [
+            r"/\d{4}/\d{2}/\d{2}",  # /2026/06/27
+            r"/\d{4}/\d{2}",        # /2026/06
+            r"\d{4}-\d{2}-\d{2}",   # 2026-06-27
+            r"\d{4}-\d{2}",         # 2026-06
+            r"/calendar",           # /calendar
+            r"/event/\d{4}",
+        ]
+        for pattern in calendar_patterns:
+            if re.search(pattern, path_lower):
+                return True
+
+        return False
+    except Exception:
+        return True
 
 
 def get_path(url: str) -> str:
@@ -61,6 +164,49 @@ def get_parent_path(path: str) -> str:
         return ""
     parts = path.rstrip("/").rsplit("/", 1)
     return parts[0] if parts[0] else "/"
+
+
+def try_get_sitemap_urls(start_url: str, base_netloc: str) -> Set[str]:
+    """Optionally fetch urls from sitemap.xml to assist discovery."""
+    urls = set()
+    try:
+        parsed = urllib.parse.urlparse(start_url)
+        sitemap_url = f"{parsed.scheme}://{parsed.netloc}/sitemap.xml"
+        resp = req_lib.get(sitemap_url, timeout=5)
+        if resp.status_code == 200:
+            soup = BeautifulSoup(resp.text, "xml")
+            for loc in soup.find_all("loc"):
+                url = loc.get_text(strip=True)
+                if url and is_internal(url, base_netloc) and not should_ignore_url(url, start_url, base_netloc):
+                    urls.add(url)
+            logger.info(f"Discovered {len(urls)} URLs from optional sitemap.xml")
+    except Exception as e:
+        logger.debug(f"Optional sitemap parse failed/skipped: {e}")
+    return urls
+
+
+def deduplicate_pages(pages: List[Dict[str, Any]], base_netloc: str) -> List[Dict[str, Any]]:
+    """Deduplicates pages using canonical URL comparison (respects link[rel=canonical])."""
+    unique_pages = []
+    seen_canonicals = set()
+    for page in pages:
+        canonical = page.get("canonical_url") or page.get("url")
+        if not canonical:
+            continue
+        
+        # Verify canonical URL is internal
+        if not is_internal(canonical, base_netloc):
+            logger.info(f"Canonical URL points to external domain: {canonical}. Skipping duplicate page: {page.get('url')}")
+            continue
+
+        if canonical not in seen_canonicals:
+            seen_canonicals.add(canonical)
+            unique_pages.append(page)
+        else:
+            logger.info(f"Removed duplicate page by canonical comparison: {page.get('url')} -> {canonical}")
+            
+    logger.info(f"Final unique canonical pages: {len(unique_pages)} (deduplicated from {len(pages)})")
+    return unique_pages
 
 
 def extract_dom_info(soup: BeautifulSoup) -> Dict[str, Any]:
@@ -130,11 +276,17 @@ async def _playwright_crawl(
 
     parsed = urllib.parse.urlparse(start_url)
     base_netloc = parsed.netloc
+    
+    # Optional sitemap integration to seed queue
+    sitemap_links = try_get_sitemap_urls(start_url, base_netloc)
+    
     visited: Set[str] = set()
     pages_data: List[Dict[str, Any]] = []
 
     # BFS queue: (url, depth, parent_path)
     queue: List[tuple] = [(start_url, 0, "")]
+    for sl in sitemap_links:
+        queue.append((sl, 1, ""))
 
     async with async_playwright() as p:
         browser = await p.chromium.launch(
@@ -156,24 +308,25 @@ async def _playwright_crawl(
                     continue
                 if depth > max_depth:
                     continue
-                if SKIP_PATTERNS.search(current_url):
+                if should_ignore_url(current_url, start_url, base_netloc):
                     continue
 
                 visited.add(norm)
                 path = get_path(norm)
                 computed_parent = get_parent_path(path) if depth > 0 else ""
 
-                discovered = len(queue) + len(pages_data) + 1
+                # Pages Discovered represents all unique normalized URLs encountered + queued
+                discovered_count = len(visited) + len(queue)
                 if progress_callback:
                     await progress_callback(
                         current_page=norm,
-                        discovered_count=discovered,
+                        discovered_count=discovered_count,
                         completed_count=len(pages_data),
-                        agent="Explorer Agent — Crawling pages with Playwright",
+                        agent="Explorer Agent — Crawling unique pages with Playwright",
                     )
 
                 page = await context.new_page()
-                html, title, screenshot_b64, dom_info = "", path, None, {}
+                html, title, screenshot_b64, dom_info, canonical_url = "", path, None, {}, None
 
                 try:
                     response = await page.goto(norm, wait_until="domcontentloaded", timeout=15_000)
@@ -187,6 +340,13 @@ async def _playwright_crawl(
                     title = await page.title() or path
                     html = await page.content()
 
+                    # Extract canonical tag
+                    canonical_href = await page.evaluate(
+                        "() => { const link = document.querySelector('link[rel=\"canonical\"]'); return link ? link.href : null; }"
+                    )
+                    if canonical_href:
+                        canonical_url = normalize_url(canonical_href, norm)
+
                     # Screenshot
                     try:
                         ss_bytes = await page.screenshot(type="jpeg", quality=55, full_page=False)
@@ -194,7 +354,7 @@ async def _playwright_crawl(
                     except Exception as e:
                         logger.debug(f"Screenshot failed {norm}: {e}")
 
-                    # Extract links via JS (captures dynamic links too)
+                    # Extract links via DOM navigation (Playwright evaluates this)
                     hrefs: List[str] = await page.evaluate(
                         "() => Array.from(document.querySelectorAll('a[href]')).map(a=>a.href)"
                     )
@@ -204,7 +364,7 @@ async def _playwright_crawl(
                             norm_link
                             and norm_link not in visited
                             and is_internal(norm_link, base_netloc)
-                            and not SKIP_PATTERNS.search(norm_link)
+                            and not should_ignore_url(norm_link, start_url, base_netloc)
                             and norm_link not in [q[0] for q in queue]
                         ):
                             queue.append((norm_link, depth + 1, path))
@@ -223,6 +383,7 @@ async def _playwright_crawl(
 
                 pages_data.append({
                     "url": norm,
+                    "canonical_url": canonical_url or norm,
                     "path": path,
                     "parent_path": computed_parent,
                     "title": title,
@@ -236,8 +397,8 @@ async def _playwright_crawl(
             await context.close()
             await browser.close()
 
-    logger.info(f"Playwright crawl complete: {len(pages_data)} pages")
-    return pages_data
+    # Apply canonical deduplication before returning unique pages
+    return deduplicate_pages(pages_data, base_netloc)
 
 
 # ─── Requests Fallback Crawler ────────────────────────────────────────────────
@@ -250,9 +411,16 @@ async def _requests_crawl(
 ) -> List[Dict[str, Any]]:
     parsed = urllib.parse.urlparse(start_url)
     base_netloc = parsed.netloc
+    
+    # Optional sitemap integration to seed queue
+    sitemap_links = try_get_sitemap_urls(start_url, base_netloc)
+    
     visited: Set[str] = set()
     pages_data: List[Dict[str, Any]] = []
+    
     queue: List[tuple] = [(start_url, 0, "")]
+    for sl in sitemap_links:
+        queue.append((sl, 1, ""))
 
     session = req_lib.Session()
     session.headers.update({"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) UXVerseAI/1.0"})
@@ -264,22 +432,23 @@ async def _requests_crawl(
             continue
         if depth > max_depth:
             continue
-        if SKIP_PATTERNS.search(current_url):
+        if should_ignore_url(current_url, start_url, base_netloc):
             continue
 
         visited.add(norm)
         path = get_path(norm)
         computed_parent = get_parent_path(path) if depth > 0 else ""
 
+        discovered_count = len(visited) + len(queue)
         if progress_callback:
             await progress_callback(
                 current_page=norm,
-                discovered_count=len(queue) + len(pages_data) + 1,
+                discovered_count=discovered_count,
                 completed_count=len(pages_data),
-                agent="Explorer Agent — Crawling pages (requests mode)",
+                agent="Explorer Agent — Crawling unique pages (requests mode)",
             )
 
-        html, title, dom_info = "", path, {}
+        html, title, dom_info, canonical_url = "", path, {}, None
         try:
             resp = session.get(norm, timeout=10, allow_redirects=True)
             if resp.status_code >= 400:
@@ -290,9 +459,20 @@ async def _requests_crawl(
             title = title_tag.get_text(strip=True) if title_tag else path
             dom_info = extract_dom_info(soup)
 
+            # Extract canonical tag
+            canonical_tag = soup.find("link", rel="canonical")
+            canonical_href = canonical_tag.get("href") if canonical_tag else None
+            if canonical_href:
+                canonical_url = normalize_url(canonical_href, norm)
+
             for a in soup.find_all("a", href=True):
                 nl = normalize_url(a["href"], norm)
-                if nl and nl not in visited and is_internal(nl, base_netloc) and not SKIP_PATTERNS.search(nl):
+                if (
+                    nl 
+                    and nl not in visited 
+                    and is_internal(nl, base_netloc) 
+                    and not should_ignore_url(nl, start_url, base_netloc)
+                ):
                     if nl not in [q[0] for q in queue]:
                         queue.append((nl, depth + 1, path))
 
@@ -303,6 +483,7 @@ async def _requests_crawl(
 
         pages_data.append({
             "url": norm,
+            "canonical_url": canonical_url or norm,
             "path": path,
             "parent_path": computed_parent,
             "title": title,
@@ -312,8 +493,7 @@ async def _requests_crawl(
             "depth": depth,
         })
 
-    logger.info(f"Requests crawl complete: {len(pages_data)} pages")
-    return pages_data
+    return deduplicate_pages(pages_data, base_netloc)
 
 
 # ─── Public API ───────────────────────────────────────────────────────────────

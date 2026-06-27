@@ -48,7 +48,7 @@ const OverallDashboard: React.FC = () => {
     { label: 'Overall Score',   value: activeAudit.overallScore,   icon: BarChart3,     color: 'from-blue-500 to-violet-500',   unit: '/100' },
     { label: 'UX Score',        value: activeAudit.uxScore,        icon: Zap,           color: 'from-violet-500 to-purple-600', unit: '/100' },
     { label: 'Accessibility',   value: activeAudit.a11yScore,      icon: Shield,        color: 'from-emerald-500 to-teal-600',  unit: '/100' },
-    { label: 'Total Pages',     value: activeAudit.totalPages,     icon: Globe,         color: 'from-sky-500 to-blue-600',      unit: '' },
+    { label: 'Unique Pages',    value: activeAudit.totalPages,     icon: Globe,         color: 'from-sky-500 to-blue-600',      unit: '' },
     { label: 'Critical Issues', value: activeAudit.criticalCount,  icon: AlertTriangle, color: 'from-red-500 to-rose-600',      unit: '' },
     { label: 'Avg Page Score',  value: Math.round(activeAudit.pages.reduce((s, p) => s + p.uxScore, 0) / Math.max(1, activeAudit.pages.length)), icon: TrendingUp, color: 'from-amber-500 to-orange-600', unit: '/100' },
   ];

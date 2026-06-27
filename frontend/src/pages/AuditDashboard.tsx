@@ -137,8 +137,8 @@ const AuditDashboard: React.FC = () => {
 
               <div className="grid grid-cols-3 gap-4">
                 {[
-                  { icon: Globe, color: 'text-blue-400', value: crawlProgress.discoveredCount, label: 'Pages Found' },
-                  { icon: CheckCircle, color: 'text-emerald-400', value: crawlProgress.completedCount, label: 'Analyzed' },
+                  { icon: Globe, color: 'text-blue-400', value: crawlProgress.discoveredCount, label: 'Pages Discovered' },
+                  { icon: CheckCircle, color: 'text-emerald-400', value: crawlProgress.completedCount, label: 'Pages Successfully Analyzed' },
                   { icon: FileText, color: 'text-violet-400', value: `${crawlProgress.completedCount > 0 ? Math.round((crawlProgress.completedCount / Math.max(1, crawlProgress.discoveredCount)) * 100) : 0}%`, label: 'Coverage' },
                 ].map(({ icon: Icon, color, value, label }) => (
                   <div key={label} className="text-center p-4 rounded-xl" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
