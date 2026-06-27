@@ -53,6 +53,7 @@ export interface PageRecord {
   businessImpact: BusinessImpactRecord;
   beforeAfter: BeforeAfterRecord;
   screenshotBoxes: BoundingBoxRecord[];
+  screenshot_b64?: string;
 }
 
 export interface IssueRecord {
