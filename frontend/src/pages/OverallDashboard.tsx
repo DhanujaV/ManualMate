@@ -16,7 +16,7 @@ const OverallDashboard: React.FC = () => {
     return (
       <div className="flex flex-col items-center justify-center h-full gap-4">
         <BarChart3 size={48} className="text-slate-600" />
-        <p className="text-slate-400 text-lg">No audit data yet.</p>
+        <p className="text-slate-400 text-lg">Run a website audit to generate insights</p>
         <button
           onClick={() => setActiveTab('auditor')}
           className="bg-gradient-button px-6 py-3 rounded-xl text-sm font-semibold text-white"

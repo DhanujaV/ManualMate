@@ -35,6 +35,7 @@ const LandingPage: React.FC = () => {
   const { setActiveTab } = useAudit();
 
   return (
+<<<<<<< HEAD
     <div className="min-h-screen overflow-x-hidden relative">
       {/* Top Navbar */}
       <header className="absolute top-0 inset-x-0 w-full z-50 bg-transparent">
@@ -64,11 +65,42 @@ const LandingPage: React.FC = () => {
               Start Free
             </button>
           </div>
+=======
+    <div className="min-h-screen overflow-x-hidden flex flex-col">
+      {/* Sticky Header Navbar */}
+      <header className="sticky top-0 z-50 w-full px-6 py-4 flex items-center justify-between border-b border-white/[0.04] backdrop-blur-md" style={{ background: 'rgba(6, 8, 20, 0.7)' }}>
+        <div className="flex items-center gap-2 cursor-pointer" onClick={() => setActiveTab('landing')}>
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-violet-600 flex items-center justify-center">
+            <Zap size={16} className="text-white" />
+          </div>
+          <span className="font-extrabold text-white text-base tracking-tight">UXVerse AI</span>
+        </div>
+        
+        <nav className="hidden md:flex items-center gap-6 text-sm font-semibold text-slate-400">
+          <a href="#features" className="hover:text-white transition-colors">Features</a>
+          <a href="#workflow" className="hover:text-white transition-colors">Workflow</a>
+          <a href="#pricing" className="hover:text-white transition-colors">Pricing</a>
+        </nav>
+
+        <div className="flex items-center gap-4">
+          <button 
+            onClick={() => setActiveTab('login')} 
+            className="text-sm font-bold text-slate-300 hover:text-white transition-colors"
+          >
+            Sign In
+          </button>
+          <button 
+            onClick={() => setActiveTab('auditor')} 
+            className="bg-gradient-button px-4 py-2 rounded-xl text-xs font-bold text-white shadow-md shadow-blue-500/10 hover:shadow-blue-500/20 active:scale-98 transition-all"
+          >
+            Start Free Audit
+          </button>
+>>>>>>> 5bc2c5caeb8aa7b97340a9e14ea62c500517cdc8
         </div>
       </header>
 
       {/* Hero */}
-      <section className="relative min-h-screen flex flex-col items-center justify-center text-center px-6 py-24">
+      <section className="relative min-h-screen flex flex-col items-center justify-center text-center px-6 py-20">
         {/* Background decoration */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
           <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[600px] h-[600px] rounded-full" style={{ background: 'radial-gradient(circle, rgba(59,130,246,0.08) 0%, transparent 70%)' }} />
@@ -176,7 +208,7 @@ const LandingPage: React.FC = () => {
       </section>
 
       {/* Features */}
-      <section className="py-24 px-6">
+      <section id="features" className="py-24 px-6">
         <div className="max-w-6xl mx-auto">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -210,7 +242,7 @@ const LandingPage: React.FC = () => {
       </section>
 
       {/* Workflow Animation */}
-      <section className="py-24 px-6">
+      <section id="workflow" className="py-24 px-6">
         <div className="max-w-4xl mx-auto">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -250,7 +282,7 @@ const LandingPage: React.FC = () => {
       </section>
 
       {/* Pricing */}
-      <section className="py-24 px-6">
+      <section id="pricing" className="py-24 px-6">
         <div className="max-w-5xl mx-auto">
           <motion.div
             initial={{ opacity: 0, y: 20 }}

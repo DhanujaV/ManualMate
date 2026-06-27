@@ -1,7 +1,7 @@
 """
-UXVerse AI — Playwright BFS Crawler (Advanced SEO & Canonical Deduplication)
-Crawls unique user-accessible pages using Playwright browser navigation.
-Respects canonical tags, ignores asset, framework, API, auth, and parameter variations.
+UXVerse AI — Playwright BFS Professional Web Crawler
+Acts like Screaming Frog / Sitebulb. Fully explores website directories and dynamic pages.
+Discovers links from robots.txt, sitemaps, DOM elements, dropdown menus, mega menus, hamburger clicks, and hovers.
 """
 import asyncio
 import base64
@@ -17,19 +17,13 @@ from bs4 import BeautifulSoup
 
 logger = logging.getLogger("uxverse.crawler")
 
-# --- Helpers ---
+
+# ─── URL Normalization & Filtering Helpers ────────────────────────────────────
 
 def normalize_url(url: str, base: str) -> Optional[str]:
     """
-    Normalizes URLs by:
-    - Resolving relative paths against the base URL.
-    - Stripping trailing slashes (except root).
-    - Removing fragments (#section).
-    - Removing tracking parameters (utm_*).
-    - Removing pagination parameters (?page=2).
-    - Removing sorting/filter parameters (sort, filter, category, tag).
-    - Removing infinite calendar date parameters.
-    - Ordering remaining parameters alphabetically for consistent hashing.
+    Normalizes URLs by resolving relative paths, removing fragments,
+    cleaning trailing slashes, stripping tracking queries, and sorting arguments.
     """
     try:
         full = urllib.parse.urljoin(base, url)
@@ -48,12 +42,10 @@ def normalize_url(url: str, base: str) -> Optional[str]:
             cleaned_params = []
             for k, v in params:
                 kl = k.lower()
-                # Ignore utm_* and keys in ignore_keys
                 if kl.startswith("utm_") or kl in ignore_keys:
                     continue
                 cleaned_params.append((k, v))
             if cleaned_params:
-                # Sort parameters for consistent URL uniqueness
                 cleaned_params.sort(key=lambda x: x[0])
                 cleaned_query = urllib.parse.urlencode(cleaned_params)
 
@@ -75,23 +67,13 @@ def is_internal(url: str, base_netloc: str) -> bool:
 
 
 def should_ignore_url(url: str, start_url: str, base_netloc: str) -> bool:
-    """
-    Ignore criteria:
-    - External domains.
-    - Asset extensions (images, zip, pdf, css, js).
-    - API paths (/api/*, /graphql, /rpc).
-    - Framework paths (/_next/*, /static/*, /assets/*, /build/*, /dist/*).
-    - Auth routes unless it is the start URL.
-    - Infinite calendar / date patterns.
-    """
+    """Ignore criteria: external sites, asset extensions, API paths, and standard static routes."""
     try:
         norm = normalize_url(url, start_url)
         if not norm:
             return True
             
         p = urllib.parse.urlparse(norm)
-        
-        # 1. External domains
         if not is_internal(norm, base_netloc):
             return True
             
@@ -100,13 +82,11 @@ def should_ignore_url(url: str, start_url: str, base_netloc: str) -> bool:
         if not path_lower:
             path_lower = "/"
             
-        # If this URL is exactly the start URL path, do not ignore it even if it contains auth keywords
         start_p = urllib.parse.urlparse(start_url)
         start_path_norm = start_p.path.lower().rstrip("/") or "/"
         if path_lower == start_path_norm:
             return False
 
-        # 2. Asset extensions
         asset_exts = {
             ".png", ".jpg", ".jpeg", ".svg", ".gif", ".css", ".js", ".woff", ".woff2", ".ico", ".pdf", ".zip",
             ".doc", ".docx", ".xls", ".xlsx", ".tar", ".gz", ".exe", ".dmg", ".pkg", ".mp4", ".mp3", ".wav", ".ogg",
@@ -116,23 +96,19 @@ def should_ignore_url(url: str, start_url: str, base_netloc: str) -> bool:
         if ext in asset_exts:
             return True
             
-        # 3. Ignore API routes
         if path_lower.startswith("/api") or "/api/" in path_lower or path_lower in ("/graphql", "/rpc"):
             return True
             
-        # 4. Ignore Framework routes
         framework_prefixes = ("/_next", "/static", "/assets", "/build", "/dist")
         for pref in framework_prefixes:
             if path_lower.startswith(pref) or f"/{pref.lstrip('/')}/" in path_lower:
                 return True
                 
-        # 5. Ignore Authentication routes (ignore unless requested via start_url)
         auth_routes = ("/login", "/logout", "/signin", "/signup", "/register", "/forgot-password", "/sign-out", "/log-out", "/delete-account")
         for auth in auth_routes:
             if path_lower.endswith(auth) or f"{auth}/" in path_lower:
                 return True
 
-        # 6. Ignore infinite calendar/date patterns in path
         calendar_patterns = [
             r"/\d{4}/\d{2}/\d{2}",  # /2026/06/27
             r"/\d{4}/\d{2}",        # /2026/06
@@ -153,8 +129,7 @@ def should_ignore_url(url: str, start_url: str, base_netloc: str) -> bool:
 def get_path(url: str) -> str:
     try:
         p = urllib.parse.urlparse(url)
-        path = p.path or "/"
-        return path
+        return p.path or "/"
     except Exception:
         return "/"
 
@@ -166,49 +141,70 @@ def get_parent_path(path: str) -> str:
     return parts[0] if parts[0] else "/"
 
 
-def try_get_sitemap_urls(start_url: str, base_netloc: str) -> Set[str]:
-    """Optionally fetch urls from sitemap.xml to assist discovery."""
-    urls = set()
+# ─── Robots.txt & Sitemap URL Discovery ───────────────────────────────────────
+
+def try_get_robots_txt_sitemaps(start_url: str) -> Set[str]:
+    """Parse robots.txt to discover Sitemap XML files."""
+    sitemaps = set()
     try:
         parsed = urllib.parse.urlparse(start_url)
-        sitemap_url = f"{parsed.scheme}://{parsed.netloc}/sitemap.xml"
+        robots_url = f"{parsed.scheme}://{parsed.netloc}/robots.txt"
+        resp = req_lib.get(robots_url, timeout=5)
+        if resp.status_code == 200:
+            for line in resp.text.split("\n"):
+                if line.lower().startswith("sitemap:"):
+                    parts = line.split(":", 1)
+                    if len(parts) > 1:
+                        sitemaps.add(parts[1].strip())
+    except Exception as e:
+        logger.debug(f"robots.txt parse failed/skipped: {e}")
+    return sitemaps
+
+
+def try_get_sitemap_urls(start_url: str, base_netloc: str) -> Set[str]:
+    """Optionally fetch urls from default /sitemap.xml location."""
+    parsed = urllib.parse.urlparse(start_url)
+    default_sitemap = f"{parsed.scheme}://{parsed.netloc}/sitemap.xml"
+    return parse_sitemap_xml(default_sitemap, base_netloc)
+
+
+def parse_sitemap_xml(sitemap_url: str, base_netloc: str) -> Set[str]:
+    urls = set()
+    try:
         resp = req_lib.get(sitemap_url, timeout=5)
         if resp.status_code == 200:
             soup = BeautifulSoup(resp.text, "xml")
             for loc in soup.find_all("loc"):
-                url = loc.get_text(strip=True)
-                if url and is_internal(url, base_netloc) and not should_ignore_url(url, start_url, base_netloc):
-                    urls.add(url)
-            logger.info(f"Discovered {len(urls)} URLs from optional sitemap.xml")
+                val = loc.get_text(strip=True)
+                if val and is_internal(val, base_netloc) and not should_ignore_url(val, sitemap_url, base_netloc):
+                    urls.add(val)
+            logger.info(f"Discovered {len(urls)} URLs from sitemap {sitemap_url}")
     except Exception as e:
-        logger.debug(f"Optional sitemap parse failed/skipped: {e}")
+        logger.debug(f"Sitemap parse failed/skipped for {sitemap_url}: {e}")
     return urls
 
 
-def deduplicate_pages(pages: List[Dict[str, Any]], base_netloc: str) -> List[Dict[str, Any]]:
-    """Deduplicates pages using canonical URL comparison (respects link[rel=canonical])."""
-    unique_pages = []
-    seen_canonicals = set()
-    for page in pages:
-        canonical = page.get("canonical_url") or page.get("url")
-        if not canonical:
-            continue
-        
-        # Verify canonical URL is internal
-        if not is_internal(canonical, base_netloc):
-            logger.info(f"Canonical URL points to external domain: {canonical}. Skipping duplicate page: {page.get('url')}")
-            continue
+# ─── Deduplication ────────────────────────────────────────────────────────────
 
-        if canonical not in seen_canonicals:
-            seen_canonicals.add(canonical)
+def deduplicate_pages(pages: List[Dict[str, Any]], base_netloc: str) -> List[Dict[str, Any]]:
+    """
+    Deduplicates pages using normalized URL comparison to keep unique page paths
+    regardless of relative/absolute canonical redirects.
+    """
+    unique_pages = []
+    seen_urls = set()
+    for page in pages:
+        url = page.get("url")
+        if not url:
+            continue
+        if url not in seen_urls:
+            seen_urls.add(url)
             unique_pages.append(page)
-        else:
-            logger.info(f"Removed duplicate page by canonical comparison: {page.get('url')} -> {canonical}")
-            
     logger.info(f"Final unique canonical pages: {len(unique_pages)} (deduplicated from {len(pages)})")
     return unique_pages
 
 
+<<<<<<< HEAD
 def extract_stylesheets(soup: BeautifulSoup) -> List[str]:
     styles = []
     for link in soup.find_all("link", rel="stylesheet"):
@@ -219,6 +215,9 @@ def extract_stylesheets(soup: BeautifulSoup) -> List[str]:
         styles.append(str(style))
     return styles
 
+=======
+# ─── Structured DOM Information Extractor ────────────────────────────────────
+>>>>>>> 5bc2c5caeb8aa7b97340a9e14ea62c500517cdc8
 
 def extract_dom_info(soup: BeautifulSoup) -> Dict[str, Any]:
     """Extract structured DOM information for agent analysis."""
@@ -235,6 +234,9 @@ def extract_dom_info(soup: BeautifulSoup) -> Dict[str, Any]:
             "placeholder": inp.get("placeholder"),
             "required": inp.has_attr("required"),
         })
+
+    meta_desc_tag = soup.find("meta", attrs={"name": "description"})
+    meta_desc = meta_desc_tag.get("content", "") if meta_desc_tag else ""
 
     return {
         "images": [
@@ -261,6 +263,7 @@ def extract_dom_info(soup: BeautifulSoup) -> Dict[str, Any]:
         "has_main_landmark": bool(soup.find("main") or soup.find(attrs={"role": "main"})),
         "html_lang": (soup.find("html") or {}).get("lang", "") if soup.find("html") else "",
         "duplicate_ids": _find_duplicate_ids(soup),
+        "meta_description": meta_desc
     }
 
 
@@ -275,7 +278,7 @@ def _find_duplicate_ids(soup: BeautifulSoup) -> List[str]:
     return dupes[:5]
 
 
-# ─── Playwright Crawler ───────────────────────────────────────────────────────
+# ─── Playwright Professional Crawler (Dynamic Actions + BFS) ──────────────────
 
 async def _playwright_crawl(
     start_url: str,
@@ -288,16 +291,22 @@ async def _playwright_crawl(
     parsed = urllib.parse.urlparse(start_url)
     base_netloc = parsed.netloc
     
-    # Optional sitemap integration to seed queue
-    sitemap_links = try_get_sitemap_urls(start_url, base_netloc)
+    # 1. Discover seed URLs from robots.txt and sitemap.xml
+    discovered_seeds = set()
+    sitemaps = try_get_robots_txt_sitemaps(start_url)
+    for sm in sitemaps:
+        discovered_seeds.update(parse_sitemap_xml(sm, base_netloc))
+    discovered_seeds.update(try_get_sitemap_urls(start_url, base_netloc))
     
     visited: Set[str] = set()
     pages_data: List[Dict[str, Any]] = []
 
-    # BFS queue: (url, depth, parent_path)
+    # BFS Queue: (url, depth, parent_path)
     queue: List[tuple] = [(start_url, 0, "")]
-    for sl in sitemap_links:
-        queue.append((sl, 1, ""))
+    for seed in sorted(discovered_seeds):
+        norm_seed = normalize_url(seed, start_url)
+        if norm_seed and is_internal(norm_seed, base_netloc) and not should_ignore_url(norm_seed, start_url, base_netloc):
+            queue.append((norm_seed, 1, ""))
 
     async with async_playwright() as p:
         browser = await p.chromium.launch(
@@ -326,14 +335,13 @@ async def _playwright_crawl(
                 path = get_path(norm)
                 computed_parent = get_parent_path(path) if depth > 0 else ""
 
-                # Pages Discovered represents all unique normalized URLs encountered + queued
                 discovered_count = len(visited) + len(queue)
                 if progress_callback:
                     await progress_callback(
                         current_page=norm,
                         discovered_count=discovered_count,
                         completed_count=len(pages_data),
-                        agent="Explorer Agent — Crawling unique pages with Playwright",
+                        agent="Explorer Agent — Crawling website subpages with Playwright",
                     )
 
                 page = await context.new_page()
@@ -350,30 +358,102 @@ async def _playwright_crawl(
                         await page.close()
                         continue
 
-                    await page.wait_for_timeout(600)
+                    # Wait for network idle
+                    try:
+                        await page.wait_for_load_state("networkidle", timeout=4000)
+                    except Exception:
+                        pass
+
+                    # 1. Scroll smoothly to trigger lazy loading
+                    await page.evaluate('''async () => {
+                        await new Promise((resolve) => {
+                            let totalHeight = 0;
+                            const distance = 120;
+                            const timer = setInterval(() => {
+                                const scrollHeight = document.body.scrollHeight;
+                                window.scrollBy(0, distance);
+                                totalHeight += distance;
+                                if (totalHeight >= scrollHeight || totalHeight > 10000) {
+                                    clearInterval(timer);
+                                    resolve();
+                                }
+                            }, 40);
+                        });
+                    }''')
+
+                    # 2. Hover elements matching dropdown/nav/menu triggers
+                    await page.evaluate('''() => {
+                        const hovers = document.querySelectorAll(
+                            'a[class*="menu" i], a[class*="dropdown" i], li[class*="dropdown" i], div[class*="dropdown" i], [role="menuitem"], [class*="nav" i] a'
+                        );
+                        for (const el of hovers) {
+                            try {
+                                const ev = new MouseEvent("mouseover", { bubbles: true, cancelable: true, view: window });
+                                el.dispatchEvent(ev);
+                            } catch(e) {}
+                        }
+                    }''')
+
+                    # 3. Click hamburger menus / expand buttons
+                    await page.evaluate('''() => {
+                        const toggles = document.querySelectorAll(
+                            'button[aria-expanded="false"], [class*="hamburger" i], [class*="menu-toggle" i], [class*="nav-toggle" i]'
+                        );
+                        for (const t of toggles) {
+                            try {
+                                if (t.click) t.click();
+                            } catch(e) {}
+                        }
+                    }''')
+
+                    await page.wait_for_timeout(1000)
 
                     title = await page.title() or path
                     html = await page.content()
 
-                    # Extract canonical tag
+                    # Extract canonical URL
                     canonical_href = await page.evaluate(
                         "() => { const link = document.querySelector('link[rel=\"canonical\"]'); return link ? link.href : null; }"
                     )
                     if canonical_href:
                         canonical_url = normalize_url(canonical_href, norm)
 
+<<<<<<< HEAD
                     # Screenshot
                     try:
                         ss_bytes = await page.screenshot(type="jpeg", quality=65, full_page=True)
                         screenshot_b64 = base64.b64encode(ss_bytes).decode("utf-8")
                     except Exception as e:
                         logger.debug(f"Screenshot failed {norm}: {e}")
+=======
+                    # Extract meta description
+                    meta_desc = await page.evaluate('''() => {
+                        const meta = document.querySelector('meta[name="description"]');
+                        return meta ? meta.content : "";
+                    }''')
+>>>>>>> 5bc2c5caeb8aa7b97340a9e14ea62c500517cdc8
 
-                    # Extract links via DOM navigation (Playwright evaluates this)
+                    # Bounding Box / Capture Full-page Screenshot
+                    try:
+                        ss_bytes = await page.screenshot(type="jpeg", quality=45, full_page=True)
+                        screenshot_b64 = base64.b64encode(ss_bytes).decode("utf-8")
+                    except Exception:
+                        try:
+                            ss_bytes = await page.screenshot(type="jpeg", quality=45, full_page=False)
+                            screenshot_b64 = base64.b64encode(ss_bytes).decode("utf-8")
+                        except Exception:
+                            screenshot_b64 = None
+
+                    # Extract navigation and page links
                     hrefs: List[str] = await page.evaluate(
                         "() => Array.from(document.querySelectorAll('a[href]')).map(a=>a.href)"
                     )
-                    for href in hrefs:
+                    nav_hrefs: List[str] = await page.evaluate('''() => {
+                        const links = document.querySelectorAll('nav a[href], footer a[href], header a[href], .sidebar a[href]');
+                        return Array.from(links).map(el => el.href);
+                    }''')
+
+                    for href in set(hrefs + nav_hrefs):
                         norm_link = normalize_url(href, norm)
                         if (
                             norm_link
@@ -384,39 +464,37 @@ async def _playwright_crawl(
                         ):
                             queue.append((norm_link, depth + 1, path))
 
-                except asyncio.TimeoutError:
-                    logger.warning(f"Timeout: {norm}")
+                    soup = BeautifulSoup(html, "html.parser")
+                    dom_info = extract_dom_info(soup)
+                    dom_info["meta_description"] = meta_desc
+                    dom_info["canonical_url"] = canonical_url or norm
+
+                    pages_data.append({
+                        "url": norm,
+                        "canonical_url": canonical_url or norm,
+                        "path": path,
+                        "parent_path": computed_parent,
+                        "title": title,
+                        "html": html,
+                        "screenshot_b64": screenshot_b64,
+                        "dom_info": dom_info,
+                        "depth": depth,
+                    })
+
                 except Exception as e:
-                    logger.error(f"Page error {norm}: {e}")
+                    logger.error(f"Error crawling page {norm}: {e}")
                 finally:
                     await page.close()
 
-                if html:
-                    soup = BeautifulSoup(html, "html.parser")
-                    dom_info = extract_dom_info(soup)
-                    title = title or soup.find("title", text=True) or path
-
-                pages_data.append({
-                    "url": norm,
-                    "canonical_url": canonical_url or norm,
-                    "path": path,
-                    "parent_path": computed_parent,
-                    "title": title,
-                    "html": html,
-                    "screenshot_b64": screenshot_b64,
-                    "dom_info": dom_info,
-                    "depth": depth,
-                })
-
+        except Exception as e:
+            logger.error(f"Playwright loop failure: {e}")
         finally:
-            await context.close()
             await browser.close()
 
-    # Apply canonical deduplication before returning unique pages
     return deduplicate_pages(pages_data, base_netloc)
 
 
-# ─── Requests Fallback Crawler ────────────────────────────────────────────────
+# ─── Requests Fallback Crawler (BFS) ──────────────────────────────────────────
 
 async def _requests_crawl(
     start_url: str,
@@ -427,15 +505,20 @@ async def _requests_crawl(
     parsed = urllib.parse.urlparse(start_url)
     base_netloc = parsed.netloc
     
-    # Optional sitemap integration to seed queue
-    sitemap_links = try_get_sitemap_urls(start_url, base_netloc)
+    discovered_seeds = set()
+    sitemaps = try_get_robots_txt_sitemaps(start_url)
+    for sm in sitemaps:
+        discovered_seeds.update(parse_sitemap_xml(sm, base_netloc))
+    discovered_seeds.update(try_get_sitemap_urls(start_url, base_netloc))
     
     visited: Set[str] = set()
     pages_data: List[Dict[str, Any]] = []
     
     queue: List[tuple] = [(start_url, 0, "")]
-    for sl in sitemap_links:
-        queue.append((sl, 1, ""))
+    for seed in sorted(discovered_seeds):
+        norm_seed = normalize_url(seed, start_url)
+        if norm_seed and is_internal(norm_seed, base_netloc) and not should_ignore_url(norm_seed, start_url, base_netloc):
+            queue.append((norm_seed, 1, ""))
 
     session = req_lib.Session()
     session.headers.update({"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) UXVerseAI/1.0"})
@@ -474,7 +557,6 @@ async def _requests_crawl(
             title = title_tag.get_text(strip=True) if title_tag else path
             dom_info = extract_dom_info(soup)
 
-            # Extract canonical tag
             canonical_tag = soup.find("link", rel="canonical")
             canonical_href = canonical_tag.get("href") if canonical_tag else None
             if canonical_href:
@@ -491,7 +573,7 @@ async def _requests_crawl(
                     if nl not in [q[0] for q in queue]:
                         queue.append((nl, depth + 1, path))
 
-            time.sleep(0.25)  # polite delay
+            time.sleep(0.2)
 
         except Exception as e:
             logger.error(f"requests crawl error {norm}: {e}")

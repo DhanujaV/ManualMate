@@ -13,7 +13,8 @@ export type TabName =
   | 'business' 
   | 'topfixes' 
   | 'coach' 
-  | 'progress';
+  | 'progress'
+  | 'login';
 
 export interface User {
   email: string;
@@ -44,10 +45,14 @@ export interface AuditRecord {
   pages: PageRecord[];
   historyScores: { timestamp: string; uxScore: number; a11yScore: number }[];
   resolvedIssuesCount: number;
+<<<<<<< HEAD
   source?: string;
   layout_type?: string;
   components?: any[];
   unique_pages?: number;
+=======
+  topImprovements?: any[];
+>>>>>>> 5bc2c5caeb8aa7b97340a9e14ea62c500517cdc8
 }
 
 export interface PageRecord {
@@ -64,17 +69,36 @@ export interface PageRecord {
   beforeAfter: BeforeAfterRecord;
   screenshotBoxes: BoundingBoxRecord[];
   screenshot_b64?: string;
+<<<<<<< HEAD
   html?: string;
+=======
+>>>>>>> 5bc2c5caeb8aa7b97340a9e14ea62c500517cdc8
 }
 
 export interface IssueRecord {
   id: string;
+  page_url: string;
+  element_selector: string;
+  element_type: string;
+  proof_source: ('DOM' | 'AXE' | 'VISION' | 'PLAYWRIGHT' | 'CSS')[];
+  confidence: number;
   severity: 'Critical' | 'Warning' | 'Minor';
-  standard?: string; // for accessibility (WCAG)
-  heuristic?: string; // for UX (Nielsen)
+  screenshot_reference?: string;
+  html_snippet: string;
+  css_snippet: string;
+  reasoning: string;
+  recommended_fix: string;
+
+  // Backwards compatibility mappings
   element?: string;
   description: string;
   recommendation: string;
+  standard?: string;
+  heuristic?: string;
+  issue_type?: string;
+  evidence_snippet?: string;
+  before_html?: string;
+  ux_reasoning?: string;
 }
 
 export interface PersonaRecord {
@@ -93,9 +117,21 @@ export interface BusinessImpactRecord {
   development_effort: 'High' | 'Medium' | 'Low';
 }
 
+export interface UXCorrection {
+  id: string;
+  title: string;
+  severity: 'Critical' | 'Warning' | 'Minor';
+  element_selector: string;
+  before_html: string;
+  after_html: string;
+  after_css: string;
+  ux_fix_explanation: string;
+  accessibility_fix_notes?: string;
+}
+
 export interface BeforeAfterRecord {
-  before: { html: string; css: string; visual: string };
-  after: { html: string; css: string; visual: string };
+  page_url: string;
+  issues: UXCorrection[];
 }
 
 export interface BoundingBoxRecord {
@@ -157,40 +193,7 @@ export const useAudit = () => {
   return context;
 };
 
-// Initial Mock Historical Audits (so Progress screen looks beautiful immediately)
-const MOCK_HISTORICAL_AUDITS: AuditRecord[] = [
-  {
-    id: "audit-1",
-    url: "https://shop.enterprise-example.com",
-    timestamp: "2026-06-10T14:30:00Z",
-    overallScore: 68,
-    uxScore: 64,
-    a11yScore: 72,
-    totalPages: 8,
-    criticalCount: 12,
-    warningCount: 18,
-    minorCount: 14,
-    resolvedIssuesCount: 0,
-    historyScores: [],
-    pages: []
-  },
-  {
-    id: "audit-2",
-    url: "https://shop.enterprise-example.com",
-    timestamp: "2026-06-18T10:15:00Z",
-    overallScore: 76,
-    uxScore: 72,
-    a11yScore: 80,
-    totalPages: 9,
-    criticalCount: 5,
-    warningCount: 12,
-    minorCount: 10,
-    resolvedIssuesCount: 13,
-    historyScores: [],
-    pages: []
-  }
-];
-
+// Provider implementation with clean empty lists and no client-side mocks
 export const AuditProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [activeTab, setActiveTab] = useState<TabName>('landing');
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
@@ -252,7 +255,7 @@ export const AuditProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [auditUrl, setAuditUrl] = useState('');
   const [isAuditing, setIsAuditing] = useState(false);
   const [activeAudit, setActiveAudit] = useState<AuditRecord | null>(null);
-  const [historicalAudits, setHistoricalAudits] = useState<AuditRecord[]>(MOCK_HISTORICAL_AUDITS);
+  const [historicalAudits, setHistoricalAudits] = useState<AuditRecord[]>([]);
   const [selectedPage, setSelectedPage] = useState<PageRecord | null>(null);
   const [coachMessages, setCoachMessages] = useState<MessageRecord[]>([
     {
@@ -285,7 +288,7 @@ export const AuditProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   }, [theme]);
 
-  // Load audit history from backend if available, or stay with fallback mock
+  // Load audit history from backend
   useEffect(() => {
     const fetchAudits = async () => {
       try {
@@ -297,12 +300,13 @@ export const AuditProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           }
         }
       } catch (e) {
-        console.warn("Backend not available, running in serverless client simulation mode.");
+        console.warn("Backend not available or offline.");
       }
     };
     fetchAudits();
   }, []);
 
+<<<<<<< HEAD
   const simulateCrawl = async (url: string) => {
     setIsAuditing(true);
     setActiveTab('auditor');
@@ -632,6 +636,8 @@ export const AuditProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setIsAuditing(false);
     setActiveTab('overall');
   };
+=======
+>>>>>>> 5bc2c5caeb8aa7b97340a9e14ea62c500517cdc8
 
   // ── WebSocket hook for real-time progress ───────────────────────────────
   const { connect: wsConnect, disconnect: wsDisconnect } = useAuditWebSocket();
@@ -701,26 +707,23 @@ export const AuditProvider: React.FC<{ children: React.ReactNode }> = ({ childre
               return;
             }
           } catch (fetchErr) {
-            console.error('Failed to fetch completed audit, falling back:', fetchErr);
+            console.error('Failed to fetch completed audit:', fetchErr);
           }
-          // Fetch failed — run simulation so the UI doesn't hang
-          await simulateCrawl(url);
+          setIsAuditing(false);
         },
 
         onError: (evt) => {
           wsDisconnect();
           console.error('Audit pipeline error:', evt);
-          simulateCrawl(url);
+          setIsAuditing(false);
         },
       });
 
       return; // Backend is handling it — done
     } catch (e) {
-      console.warn('Backend unreachable — running high-fidelity client simulation:', e);
+      console.error('Backend unreachable or error starting audit:', e);
+      setIsAuditing(false);
     }
-
-    // ── Fallback: client-side simulation ────────────────────────────────
-    await simulateCrawl(url);
   };
 
   const sendCoachMessage = async (text: string) => {
@@ -840,16 +843,27 @@ export const AuditProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       });
       if (response.ok) {
         const data = await response.json();
-        // Update active audit page record before/after
+        // Update active audit page record before/after issues
         setActiveAudit(prev => {
           if (!prev) return prev;
           const updatedPages = prev.pages.map(p => {
             if (p.url === pageUrl) {
+              const updatedIssues = p.beforeAfter.issues.map(iss => {
+                if (iss.id === issueId) {
+                  return {
+                    ...iss,
+                    before_html: data.before?.html || data.before || iss.before_html,
+                    after_html: data.after?.html || data.after || iss.after_html,
+                    ux_fix_explanation: data.reasoning || data.after?.visual || iss.ux_fix_explanation
+                  };
+                }
+                return iss;
+              });
               return {
                 ...p,
                 beforeAfter: {
-                  before: data.before,
-                  after: data.after
+                  ...p.beforeAfter,
+                  issues: updatedIssues
                 }
               };
             }
@@ -862,21 +876,32 @@ export const AuditProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         if (selectedPage && selectedPage.url === pageUrl) {
           setSelectedPage(prev => {
             if (!prev) return prev;
+            const updatedIssues = prev.beforeAfter.issues.map(iss => {
+              if (iss.id === issueId) {
+                return {
+                  ...iss,
+                  before_html: data.before?.html || data.before || iss.before_html,
+                  after_html: data.after?.html || data.after || iss.after_html,
+                  ux_fix_explanation: data.reasoning || data.after?.visual || iss.ux_fix_explanation
+                };
+              }
+              return iss;
+            });
             return {
               ...prev,
               beforeAfter: {
-                before: data.before,
-                after: data.after
+                ...prev.beforeAfter,
+                issues: updatedIssues
               }
             };
           });
         }
       }
     } catch (e) {
-      console.warn("Backend fixes API offline. Triggering local layout fix simulation.");
+      console.warn("Backend fixes API offline.");
     }
 
-    // Direct client tab jump to Before vs After view to let user review code!
+    // Direct client tab jump to Before vs After view
     setActiveTab('beforeafter');
   };
 
