@@ -41,6 +41,7 @@ class BusinessImpactRecord(BaseModel):
 class BeforeAfterRecord(BaseModel):
     before: dict  # { html: str, css: str, visual: str }
     after: dict   # { html: str, css: str, visual: str }
+    reasoning: Optional[str] = None
 
 
 class PageRecord(BaseModel):

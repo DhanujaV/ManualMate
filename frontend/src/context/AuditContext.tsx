@@ -84,6 +84,7 @@ export interface BusinessImpactRecord {
 export interface BeforeAfterRecord {
   before: { html: string; css: string; visual: string };
   after: { html: string; css: string; visual: string };
+  reasoning?: string;
 }
 
 export interface BoundingBoxRecord {

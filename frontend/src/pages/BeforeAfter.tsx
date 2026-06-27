@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import Editor from '@monaco-editor/react';
-import { GitCompare, Eye, Code2, Palette } from 'lucide-react';
+import { GitCompare, Eye, Code2, Palette, Sparkles } from 'lucide-react';
 import { useAudit } from '../context/AuditContext';
 
 type ViewTab = 'visual' | 'html' | 'css';
@@ -129,6 +129,25 @@ const BeforeAfter: React.FC = () => {
           )}
         </div>
       </motion.div>
+
+      {/* AI Fix Reasoning */}
+      {beforeAfter.reasoning && (
+        <motion.div
+          initial={{ opacity: 0, y: 15 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+          className="glass-card p-6 rounded-2xl border border-blue-500/10"
+          style={{ background: 'rgba(59,130,246,0.02)' }}
+        >
+          <div className="flex items-center gap-2 mb-3">
+            <Sparkles size={16} className="text-blue-400" />
+            <h3 className="text-xs font-bold text-blue-300 uppercase tracking-wider">AI Fix Reasoning</h3>
+          </div>
+          <p className="text-sm text-slate-300 leading-relaxed font-medium">
+            {beforeAfter.reasoning}
+          </p>
+        </motion.div>
+      )}
     </div>
   );
 };
