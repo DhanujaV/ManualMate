@@ -130,3 +130,8 @@ class ProgressEvent(BaseModel):
     percent: int
     estimated_time: str
     error: Optional[str] = None
+
+
+class GenerateFixRequest(BaseModel):
+    url: str
+    issue_id: str

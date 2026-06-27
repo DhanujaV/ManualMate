@@ -12,9 +12,12 @@ from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from database import db
-from models import AuditStartRequest, CoachChatRequest
-from orchestrator import AuditOrchestrator
+from backend.database import db
+from backend.models import AuditStartRequest, CoachChatRequest, GenerateFixRequest
+from backend.orchestrator import AuditOrchestrator
+from backend.agents.improvement_agent import ImprovementAgent
+
+_improvement_agent = ImprovementAgent()
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 logger = logging.getLogger("uxverse.main")
@@ -97,6 +100,97 @@ def get_audit(audit_id: str):
 def list_audits():
     """List all stored audits (for Progress Tracker)."""
     return db.list_audits()
+
+
+@app.post("/api/fixes/generate")
+async def generate_fix(request: GenerateFixRequest):
+    """
+    Generates a focused before/after code fix for a specific issue on a page.
+    Looks up the page HTML from stored audit results and runs the ImprovementAgent
+    on the single target issue.
+    """
+    page_url = request.url
+    issue_id = request.issue_id
+
+    # Search all cached audit results for a page matching the URL
+    target_page = None
+    target_issue = None
+
+    for audit_result in _audit_results.values():
+        for page in audit_result.get("pages", []):
+            if page.get("url") == page_url:
+                target_page = page
+                break
+        if target_page:
+            break
+
+    # Fallback: search the database
+    if not target_page:
+        all_audits = db.list_audits()
+        for audit_record in all_audits:
+            for page in audit_record.get("pages", []):
+                if page.get("url") == page_url:
+                    target_page = page
+                    break
+            if target_page:
+                break
+
+    if not target_page:
+        raise HTTPException(status_code=404, detail=f"No audit data found for URL: {page_url}")
+
+    # Find the specific issue by ID across ux and a11y issues
+    all_page_issues = target_page.get("uxIssues", []) + target_page.get("a11yIssues", [])
+    for issue in all_page_issues:
+        if issue.get("id") == issue_id:
+            target_issue = issue
+            break
+
+    if not target_issue:
+        raise HTTPException(status_code=404, detail=f"Issue '{issue_id}' not found on page {page_url}")
+
+    # Generate the before/after fix using the improvement agent
+    ux_issues = [target_issue] if target_issue in target_page.get("uxIssues", []) else []
+    a11y_issues = [target_issue] if target_issue in target_page.get("a11yIssues", []) else []
+    if not ux_issues and not a11y_issues:
+        # If we couldn't classify, treat as ux issue
+        ux_issues = [target_issue]
+
+    before_after = _improvement_agent.generate(
+        page_url=page_url,
+        html=target_page.get("html", ""),
+        ux_issues=ux_issues,
+        a11y_issues=a11y_issues,
+    )
+
+    # Return structured before/after for the matching issue
+    matching_fix = None
+    for fix in before_after.get("issues", []):
+        if fix.get("id") == issue_id:
+            matching_fix = fix
+            break
+
+    if not matching_fix and before_after.get("issues"):
+        matching_fix = before_after["issues"][0]
+
+    if not matching_fix:
+        raise HTTPException(status_code=422, detail="Could not generate a fix for this issue.")
+
+    return {
+        "issue_id": issue_id,
+        "page_url": page_url,
+        "before": {
+            "html": matching_fix.get("before_html", ""),
+        },
+        "after": {
+            "html": matching_fix.get("after_html", ""),
+            "css": matching_fix.get("after_css", ""),
+            "visual": matching_fix.get("ux_fix_explanation", ""),
+        },
+        "reasoning": matching_fix.get("ux_fix_explanation", ""),
+        "accessibility_notes": matching_fix.get("accessibility_fix_notes", ""),
+        "severity": target_issue.get("severity", "Warning"),
+        "title": matching_fix.get("title", ""),
+    }
 
 
 @app.post("/api/coach/chat")
