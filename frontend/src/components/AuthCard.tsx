@@ -16,29 +16,29 @@ export const AuthCard: React.FC<AuthCardProps> = ({ onGoogleLogin, isLoading, er
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 30 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-      className="relative z-10 w-full max-w-[460px] mx-auto px-4 sm:px-0"
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={errorMsg ? { x: [-8, 8, -8, 8, 0] } : { opacity: 1, scale: 1 }}
+      transition={errorMsg ? { duration: 0.4 } : { duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+      className="relative z-10 w-full max-w-[420px] mx-auto"
     >
-      {/* Glow highlight backing */}
-      <div className="absolute -inset-1.5 rounded-3xl bg-gradient-to-r from-blue-500/10 to-violet-500/10 blur-xl opacity-75 pointer-events-none" />
+      {/* Dynamic hover-glow outline backing */}
+      <div className="absolute -inset-1 rounded-[24px] bg-gradient-to-r from-blue-500/20 via-purple-500/20 to-emerald-500/20 blur-lg opacity-70 pointer-events-none group-hover:opacity-100 transition-opacity duration-300" />
 
-      {/* Main card box with high-end glassmorphic style */}
+      {/* Main card panel box with ultra-premium glassmorphism */}
       <div 
-        className="w-full glass-card p-6 sm:p-10 rounded-3xl border border-slate-200/50 dark:border-white/[0.06] shadow-[0_20px_50px_rgba(0,0,0,0.15)] backdrop-blur-2xl bg-white/60 dark:bg-slate-950/45"
+        className="w-full glass-card p-8 sm:p-10 rounded-[24px] border border-slate-200/50 dark:border-white/[0.06] shadow-[0_20px_50px_rgba(0,0,0,0.15)] backdrop-blur-2xl bg-white/70 dark:bg-slate-950/50 hover:border-slate-300 dark:hover:border-white/[0.1] hover:shadow-[0_25px_60px_rgba(0,0,0,0.2)] transition-all duration-300"
       >
         {/* Header */}
         <div className="text-center mb-8">
-          <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
+          <h2 className="text-2xl sm:text-3xl font-black text-slate-950 dark:text-white tracking-tight">
             Welcome to UXVerse AI
           </h2>
-          <p className="text-sm font-semibold text-slate-500 dark:text-slate-400 mt-2">
-            Sign in to continue your UX audit workspace
+          <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mt-2">
+            AI-powered UX intelligence platform
           </p>
         </div>
 
-        {/* Error notification message */}
+        {/* Error notification banner */}
         <AnimatePresence>
           {errorMsg && (
             <motion.div
@@ -53,11 +53,13 @@ export const AuthCard: React.FC<AuthCardProps> = ({ onGoogleLogin, isLoading, er
           )}
         </AnimatePresence>
 
-        {/* Primary OAuth Method */}
-        <GoogleButton onClick={onGoogleLogin} isLoading={isLoading} />
+        {/* Google OAuth Main Action */}
+        <div className="mb-2">
+          <GoogleButton onClick={onGoogleLogin} isLoading={isLoading} />
+        </div>
 
         {/* Divider */}
-        <div className="relative flex py-4 items-center mt-2">
+        <div className="relative flex py-4 items-center">
           <div className="flex-grow border-t border-slate-200 dark:border-white/[0.06]"></div>
           <span className="flex-shrink mx-4 text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">
             OR
@@ -67,7 +69,7 @@ export const AuthCard: React.FC<AuthCardProps> = ({ onGoogleLogin, isLoading, er
 
         {/* Secondary Authentication Option (email/password placeholders) */}
         <div className="space-y-4 opacity-50 select-none cursor-not-allowed">
-          {/* Email input */}
+          {/* Email input field with floating label */}
           <div className="relative">
             <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" size={18} />
             <input
@@ -75,12 +77,22 @@ export const AuthCard: React.FC<AuthCardProps> = ({ onGoogleLogin, isLoading, er
               disabled
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="Email Address"
-              className="w-full pl-11 pr-4 py-3 rounded-xl border border-slate-200 dark:border-white/[0.08] bg-slate-50/50 dark:bg-white/[0.03] text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 outline-none text-sm font-medium"
+              placeholder=" "
+              id="email-input"
+              className="peer w-full pl-11 pr-4 py-3.5 rounded-xl border border-slate-200 dark:border-white/[0.08] bg-slate-50/50 dark:bg-white/[0.03] text-slate-900 dark:text-white placeholder-transparent outline-none text-sm font-medium"
             />
+            <label
+              htmlFor="email-input"
+              className="absolute left-11 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-400 dark:text-slate-500 pointer-events-none transition-all duration-200 
+              peer-placeholder-shown:text-sm peer-placeholder-shown:font-medium peer-placeholder-shown:top-1/2 
+              peer-focus:-translate-y-6 peer-focus:text-[10px] peer-focus:font-bold peer-focus:text-blue-500 dark:peer-focus:text-blue-400
+              peer-[:not(:placeholder-shown)]:-translate-y-6 peer-[:not(:placeholder-shown)]:text-[10px] peer-[:not(:placeholder-shown)]:font-bold"
+            >
+              Email Address
+            </label>
           </div>
 
-          {/* Password input */}
+          {/* Password input field with floating label */}
           <div className="relative">
             <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" size={18} />
             <input
@@ -88,9 +100,19 @@ export const AuthCard: React.FC<AuthCardProps> = ({ onGoogleLogin, isLoading, er
               disabled
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="Password"
-              className="w-full pl-11 pr-12 py-3 rounded-xl border border-slate-200 dark:border-white/[0.08] bg-slate-50/50 dark:bg-white/[0.03] text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 outline-none text-sm font-medium"
+              placeholder=" "
+              id="password-input"
+              className="peer w-full pl-11 pr-12 py-3.5 rounded-xl border border-slate-200 dark:border-white/[0.08] bg-slate-50/50 dark:bg-white/[0.03] text-slate-900 dark:text-white placeholder-transparent outline-none text-sm font-medium"
             />
+            <label
+              htmlFor="password-input"
+              className="absolute left-11 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-400 dark:text-slate-500 pointer-events-none transition-all duration-200 
+              peer-placeholder-shown:text-sm peer-placeholder-shown:font-medium peer-placeholder-shown:top-1/2 
+              peer-focus:-translate-y-6 peer-focus:text-[10px] peer-focus:font-bold peer-focus:text-blue-500 dark:peer-focus:text-blue-400
+              peer-[:not(:placeholder-shown)]:-translate-y-6 peer-[:not(:placeholder-shown)]:text-[10px] peer-[:not(:placeholder-shown)]:font-bold"
+            >
+              Password
+            </label>
             <button
               type="button"
               disabled
