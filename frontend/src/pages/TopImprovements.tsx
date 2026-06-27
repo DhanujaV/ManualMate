@@ -5,15 +5,19 @@ import { useAudit } from '../context/AuditContext';
 import IssueBadge from '../components/IssueBadge';
 
 const TopImprovements: React.FC = () => {
-  const { activeAudit, setSelectedPage, generateFixForIssue } = useAudit();
+  const { activeAudit, setSelectedPage, generateFixForIssue, setActiveTab } = useAudit();
 
   if (!activeAudit) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-center">
-          <Zap size={48} className="text-slate-600 mx-auto mb-4" />
-          <p className="text-slate-400">Run an audit to see the top 3 priority improvements.</p>
-        </div>
+      <div className="flex flex-col items-center justify-center h-full gap-4">
+        <Zap size={48} className="text-slate-600" />
+        <p className="text-slate-400 text-lg">Run a website audit to generate insights</p>
+        <button
+          onClick={() => setActiveTab('auditor')}
+          className="bg-gradient-button px-6 py-3 rounded-xl text-sm font-semibold text-white"
+        >
+          Start an Audit
+        </button>
       </div>
     );
   }

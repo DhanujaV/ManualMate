@@ -22,7 +22,7 @@ const personaColors = [
 ];
 
 const PersonaAnalysis: React.FC = () => {
-  const { activeAudit, selectedPage } = useAudit();
+  const { activeAudit, selectedPage, setActiveTab } = useAudit();
   const [selectedIndex, setSelectedIndex] = useState(0);
 
   const personas = selectedPage?.personas?.length
@@ -31,11 +31,15 @@ const PersonaAnalysis: React.FC = () => {
 
   if (!activeAudit || personas.length === 0) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-center">
-          <Users size={48} className="text-slate-600 mx-auto mb-4" />
-          <p className="text-slate-400">Run an audit to view persona analysis results.</p>
-        </div>
+      <div className="flex flex-col items-center justify-center h-full gap-4">
+        <Users size={48} className="text-slate-600" />
+        <p className="text-slate-400 text-lg">Run a website audit to generate insights</p>
+        <button
+          onClick={() => setActiveTab('auditor')}
+          className="bg-gradient-button px-6 py-3 rounded-xl text-sm font-semibold text-white"
+        >
+          Start an Audit
+        </button>
       </div>
     );
   }

@@ -7,14 +7,29 @@ import { useAudit } from '../context/AuditContext';
 type ViewTab = 'visual' | 'html' | 'css';
 
 const BeforeAfter: React.FC = () => {
-  const { selectedPage, setActiveTab } = useAudit();
+  const { activeAudit, selectedPage, setActiveTab } = useAudit();
   const [activeViewTab, setActiveViewTab] = useState<ViewTab>('html');
+
+  if (!activeAudit) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full gap-4">
+        <GitCompare size={48} className="text-slate-600" />
+        <p className="text-slate-400 text-lg">Run a website audit to generate insights</p>
+        <button
+          onClick={() => setActiveTab('auditor')}
+          className="bg-gradient-button px-6 py-3 rounded-xl text-sm font-semibold text-white"
+        >
+          Start an Audit
+        </button>
+      </div>
+    );
+  }
 
   if (!selectedPage) {
     return (
       <div className="flex flex-col items-center justify-center h-full gap-4">
         <GitCompare size={48} className="text-slate-600" />
-        <p className="text-slate-400">Select a page from Page Details to compare before and after.</p>
+        <p className="text-slate-400 text-sm">Select a page from Page Details to compare before and after.</p>
         <button onClick={() => setActiveTab('details')}
           className="bg-gradient-button px-6 py-3 rounded-xl text-sm font-semibold text-white">
           Go to Page Details
