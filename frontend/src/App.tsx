@@ -13,6 +13,7 @@ import BusinessImpact from './pages/BusinessImpact';
 import TopImprovements from './pages/TopImprovements';
 import AICoach from './pages/AICoach';
 import ProgressTracker from './pages/ProgressTracker';
+import LoginPage from './pages/LoginPage';
 
 const pageVariants = {
   initial: { opacity: 0, y: 12 },
@@ -36,17 +37,18 @@ const AppContent: React.FC = () => {
       case 'topfixes':    return <TopImprovements />;
       case 'coach':       return <AICoach />;
       case 'progress':    return <ProgressTracker />;
+      case 'login':       return <LoginPage />;
       default:            return <LandingPage />;
     }
   };
 
-  const isLanding = activeTab === 'landing';
+  const isFullscreen = activeTab === 'landing' || activeTab === 'login';
 
   return (
     <div className="flex h-screen overflow-hidden">
-      {!isLanding && <Sidebar />}
+      {!isFullscreen && <Sidebar />}
       <main
-        className={`flex-1 overflow-y-auto ${isLanding ? 'w-full' : ''}`}
+        className={`flex-1 overflow-y-auto ${isFullscreen ? 'w-full' : ''}`}
         style={activeTab === 'coach' ? { display: 'flex', flexDirection: 'column' } : {}}
       >
         <AnimatePresence mode="wait">

@@ -12,7 +12,8 @@ export type TabName =
   | 'business' 
   | 'topfixes' 
   | 'coach' 
-  | 'progress';
+  | 'progress'
+  | 'login';
 
 export interface CrawlProgress {
   currentPage: string;
