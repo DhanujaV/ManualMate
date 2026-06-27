@@ -2,7 +2,7 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import {
   Zap, Shield, Eye, GitCompare, MessageSquare, TrendingUp,
-  ArrowRight, Globe, CheckCircle, Star
+  ArrowRight, Globe, CheckCircle, Star, BarChart3
 } from 'lucide-react';
 import { useAudit } from '../context/AuditContext';
 
@@ -35,7 +35,38 @@ const LandingPage: React.FC = () => {
   const { setActiveTab } = useAudit();
 
   return (
-    <div className="min-h-screen overflow-x-hidden">
+    <div className="min-h-screen overflow-x-hidden relative">
+      {/* Top Navbar */}
+      <header className="absolute top-0 inset-x-0 w-full z-50 bg-transparent">
+        <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-violet-600 flex items-center justify-center shadow-lg shadow-blue-500/10">
+              <BarChart3 size={16} className="text-white" />
+            </div>
+            <span className="font-bold text-white tracking-tight text-lg">UXVerse <span className="text-blue-400">AI</span></span>
+          </div>
+          <nav className="hidden md:flex items-center gap-8 text-sm text-slate-400 font-medium">
+            <a href="#" className="hover:text-white transition-colors">Features</a>
+            <a href="#" className="hover:text-white transition-colors">Workflow</a>
+            <a href="#" className="hover:text-white transition-colors">Pricing</a>
+          </nav>
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={() => setActiveTab('login')} 
+              className="text-sm font-semibold text-slate-300 hover:text-white transition-colors cursor-pointer"
+            >
+              Sign In
+            </button>
+            <button 
+              onClick={() => setActiveTab('auditor')} 
+              className="bg-white/10 hover:bg-white/15 text-white border border-white/10 px-4 py-2 rounded-xl text-sm font-semibold transition-all cursor-pointer"
+            >
+              Start Free
+            </button>
+          </div>
+        </div>
+      </header>
+
       {/* Hero */}
       <section className="relative min-h-screen flex flex-col items-center justify-center text-center px-6 py-24">
         {/* Background decoration */}

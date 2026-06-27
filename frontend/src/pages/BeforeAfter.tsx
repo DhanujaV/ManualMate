@@ -3,11 +3,13 @@ import { motion } from 'framer-motion';
 import Editor from '@monaco-editor/react';
 import { GitCompare, Eye, Code2, Palette } from 'lucide-react';
 import { useAudit } from '../context/AuditContext';
+import ImprovementSummary from '../components/ImprovementSummary';
+import VisualBeforeAfter from '../components/VisualBeforeAfter';
 
 type ViewTab = 'visual' | 'html' | 'css';
 
 const BeforeAfter: React.FC = () => {
-  const { selectedPage, setActiveTab } = useAudit();
+  const { selectedPage, setActiveTab, activeAudit } = useAudit();
   const [activeViewTab, setActiveViewTab] = useState<ViewTab>('html');
 
   if (!selectedPage) {
@@ -48,6 +50,12 @@ const BeforeAfter: React.FC = () => {
           ))}
         </div>
       </motion.div>
+
+      {/* Delta Improvements Summary Bar */}
+      <ImprovementSummary activeAudit={activeAudit} />
+
+      {/* Visual In-Place Comparison Section */}
+      <VisualBeforeAfter activeAudit={activeAudit} selectedPage={selectedPage} />
 
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
         className="grid grid-cols-1 lg:grid-cols-2 gap-6">

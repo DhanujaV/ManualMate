@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   LayoutDashboard, Globe, BarChart3, FileSearch, GitCompare,
   Users, TrendingUp, Zap, MessageSquare, ChevronLeft, ChevronRight,
-  Sun, Moon, Scan, History, Sparkles
+  Sun, Moon, Scan, History, Sparkles, LogOut
 } from 'lucide-react';
 import { useAudit } from '../context/AuditContext';
 import type { TabName } from '../context/AuditContext';
@@ -23,7 +23,7 @@ const navItems: { id: TabName; icon: React.ElementType; label: string; requiresA
 ];
 
 const Sidebar: React.FC = () => {
-  const { activeTab, setActiveTab, theme, setTheme, activeAudit, auditUrl } = useAudit();
+  const { activeTab, setActiveTab, theme, setTheme, activeAudit, auditUrl, user, logout } = useAudit();
   const [collapsed, setCollapsed] = useState(false);
 
   return (
@@ -136,6 +136,37 @@ const Sidebar: React.FC = () => {
 
       {/* Bottom controls */}
       <div className="p-3 border-t border-white/[0.06] flex flex-col gap-2">
+        {/* User Card when expanded */}
+        {user && !collapsed && (
+          <div className="flex items-center gap-3 px-3 py-2 rounded-xl bg-white/[0.02] border border-white/[0.04] mb-1 overflow-hidden">
+            {user.photoURL ? (
+              <img src={user.photoURL} alt={user.name} className="w-8 h-8 rounded-full object-cover border border-white/10" />
+            ) : (
+              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-xs font-bold text-white uppercase flex-shrink-0">
+                {user.name ? user.name.substring(0, 2) : 'UX'}
+              </div>
+            )}
+            <div className="flex flex-col min-w-0">
+              <span className="text-xs font-semibold text-slate-200 truncate">{user.name || 'User'}</span>
+              <span className="text-[10px] text-slate-500 truncate">{user.email}</span>
+            </div>
+          </div>
+        )}
+
+        {/* User Icon when collapsed */}
+        {user && collapsed && (
+          <div className="flex justify-center mb-1 py-1">
+            {user.photoURL ? (
+              <img src={user.photoURL} alt={user.name} className="w-8 h-8 rounded-full object-cover border border-white/10" />
+            ) : (
+              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-xs font-bold text-white uppercase">
+                {user.name ? user.name.substring(0, 2) : 'UX'}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Theme Toggle */}
         <button
           onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
           className={`flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-slate-400 hover:text-slate-200 hover:bg-white/[0.04] transition-all duration-200`}
@@ -145,6 +176,22 @@ const Sidebar: React.FC = () => {
             {!collapsed && (
               <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="text-sm">
                 {theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
+              </motion.span>
+            )}
+          </AnimatePresence>
+        </button>
+
+        {/* Logout Button */}
+        <button
+          onClick={logout}
+          className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-slate-400 hover:text-red-400 hover:bg-red-950/20 transition-all duration-200"
+          title="Sign Out"
+        >
+          <LogOut size={16} className="flex-shrink-0" />
+          <AnimatePresence>
+            {!collapsed && (
+              <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="text-sm">
+                Sign Out
               </motion.span>
             )}
           </AnimatePresence>

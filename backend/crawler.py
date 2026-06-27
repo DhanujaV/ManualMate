@@ -209,6 +209,17 @@ def deduplicate_pages(pages: List[Dict[str, Any]], base_netloc: str) -> List[Dic
     return unique_pages
 
 
+def extract_stylesheets(soup: BeautifulSoup) -> List[str]:
+    styles = []
+    for link in soup.find_all("link", rel="stylesheet"):
+        href = link.get("href")
+        if href:
+            styles.append(f'<link rel="stylesheet" href="{href}">')
+    for style in soup.find_all("style"):
+        styles.append(str(style))
+    return styles
+
+
 def extract_dom_info(soup: BeautifulSoup) -> Dict[str, Any]:
     """Extract structured DOM information for agent analysis."""
     labels = {lbl.get("for"): lbl.get_text(strip=True) for lbl in soup.find_all("label") if lbl.get("for")}
@@ -329,7 +340,11 @@ async def _playwright_crawl(
                 html, title, screenshot_b64, dom_info, canonical_url = "", path, None, {}, None
 
                 try:
-                    response = await page.goto(norm, wait_until="domcontentloaded", timeout=15_000)
+                    try:
+                        response = await page.goto(norm, wait_until="networkidle", timeout=15_000)
+                    except Exception:
+                        response = await page.goto(norm, wait_until="load", timeout=10_000)
+
                     if response and response.status >= 400:
                         logger.info(f"Skip {norm} → HTTP {response.status}")
                         await page.close()
@@ -349,7 +364,7 @@ async def _playwright_crawl(
 
                     # Screenshot
                     try:
-                        ss_bytes = await page.screenshot(type="jpeg", quality=55, full_page=False)
+                        ss_bytes = await page.screenshot(type="jpeg", quality=65, full_page=True)
                         screenshot_b64 = base64.b64encode(ss_bytes).decode("utf-8")
                     except Exception as e:
                         logger.debug(f"Screenshot failed {norm}: {e}")
@@ -525,7 +540,7 @@ def crawl_sync(
     async def _run():
         return await crawl_async(start_url, max_pages=max_pages, progress_callback=progress_callback)
 
-    loop = asyncio.new_event_loop()
+    loop = asyncio.get_event_loop_policy().new_event_loop()
     try:
         asyncio.set_event_loop(loop)
         return loop.run_until_complete(_run())

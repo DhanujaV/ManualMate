@@ -3,6 +3,7 @@ import { useAuditWebSocket } from '../hooks/useAuditWebSocket';
 
 export type TabName = 
   | 'landing' 
+  | 'login'
   | 'overall' 
   | 'auditor' 
   | 'structure' 
@@ -13,6 +14,12 @@ export type TabName =
   | 'topfixes' 
   | 'coach' 
   | 'progress';
+
+export interface User {
+  email: string;
+  name?: string;
+  photoURL?: string;
+}
 
 export interface CrawlProgress {
   currentPage: string;
@@ -37,6 +44,10 @@ export interface AuditRecord {
   pages: PageRecord[];
   historyScores: { timestamp: string; uxScore: number; a11yScore: number }[];
   resolvedIssuesCount: number;
+  source?: string;
+  layout_type?: string;
+  components?: any[];
+  unique_pages?: number;
 }
 
 export interface PageRecord {
@@ -52,6 +63,8 @@ export interface PageRecord {
   businessImpact: BusinessImpactRecord;
   beforeAfter: BeforeAfterRecord;
   screenshotBoxes: BoundingBoxRecord[];
+  screenshot_b64?: string;
+  html?: string;
 }
 
 export interface IssueRecord {
@@ -101,6 +114,7 @@ export interface MessageRecord {
   text: string;
   timestamp: string;
   codeBlocks?: { language: string; code: string }[];
+  pipelineLog?: string[];
 }
 
 interface AuditContextType {
@@ -117,9 +131,22 @@ interface AuditContextType {
   selectedPage: PageRecord | null;
   setSelectedPage: (page: PageRecord | null) => void;
   coachMessages: MessageRecord[];
-  startAudit: (url: string) => Promise<void>;
+  startAudit: (
+    url: string,
+    input_type?: string,
+    screenshots?: string[],
+    figma_url?: string,
+    figma_token?: string,
+    enhance_analysis?: boolean
+  ) => Promise<void>;
   sendCoachMessage: (text: string) => Promise<void>;
   generateFixForIssue: (pageUrl: string, issueId: string) => Promise<void>;
+  user: User | null;
+  isAuthenticated: boolean;
+  login: (email: string, password: string) => Promise<boolean>;
+  loginWithGoogle: () => Promise<boolean>;
+  loginWithGithub: () => Promise<boolean>;
+  logout: () => void;
 }
 
 const AuditContext = createContext<AuditContextType | undefined>(undefined);
@@ -167,6 +194,61 @@ const MOCK_HISTORICAL_AUDITS: AuditRecord[] = [
 export const AuditProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [activeTab, setActiveTab] = useState<TabName>('landing');
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+  const [user, setUser] = useState<User | null>(null);
+
+  const isAuthenticated = !!user;
+
+  const login = async (email: string, password: string): Promise<boolean> => {
+    // Simulate Firebase delay
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    // Accept valid emails, check password length >= 6
+    if (!email.includes('@')) {
+      throw new Error("Please enter a valid email address.");
+    }
+    if (password.length < 6) {
+      throw new Error("Password must be at least 6 characters.");
+    }
+    
+    // Simulate success
+    const mockUser: User = {
+      email,
+      name: email.split('@')[0].charAt(0).toUpperCase() + email.split('@')[0].slice(1),
+    };
+    setUser(mockUser);
+    
+    // Redirect to dashboard
+    setActiveTab('overall');
+    return true;
+  };
+
+  const loginWithGoogle = async (): Promise<boolean> => {
+    await new Promise(resolve => setTimeout(resolve, 1200));
+    const mockUser: User = {
+      email: 'alex.designer@uxverse.ai',
+      name: 'Alex Rivera',
+      photoURL: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=256&h=256&fit=crop'
+    };
+    setUser(mockUser);
+    setActiveTab('overall');
+    return true;
+  };
+
+  const loginWithGithub = async (): Promise<boolean> => {
+    await new Promise(resolve => setTimeout(resolve, 1200));
+    const mockUser: User = {
+      email: 'github.developer@uxverse.ai',
+      name: 'Sarah Chen',
+      photoURL: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?q=80&w=256&h=256&fit=crop'
+    };
+    setUser(mockUser);
+    setActiveTab('overall');
+    return true;
+  };
+
+  const logout = () => {
+    setUser(null);
+    setActiveTab('landing');
+  };
   const [auditUrl, setAuditUrl] = useState('');
   const [isAuditing, setIsAuditing] = useState(false);
   const [activeAudit, setActiveAudit] = useState<AuditRecord | null>(null);
@@ -272,6 +354,7 @@ export const AuditProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       uxScore: 78,
       a11yScore: 84,
       totalPages: 8,
+      unique_pages: 8,
       criticalCount: 3,
       warningCount: 7,
       minorCount: 5,
@@ -553,8 +636,15 @@ export const AuditProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   // ── WebSocket hook for real-time progress ───────────────────────────────
   const { connect: wsConnect, disconnect: wsDisconnect } = useAuditWebSocket();
 
-  const startAudit = async (url: string) => {
-    setAuditUrl(url);
+  const startAudit = async (
+    url: string,
+    input_type: string = 'url',
+    screenshots?: string[],
+    figma_url?: string,
+    figma_token?: string,
+    enhance_analysis?: boolean
+  ) => {
+    setAuditUrl(url || (input_type === 'screenshot' ? 'Uploaded Screenshots' : 'Figma Design'));
     setIsAuditing(true);
     setActiveTab('auditor');
 
@@ -563,7 +653,14 @@ export const AuditProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       const response = await fetch(`${BACKEND_URL}/api/audit/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url }),
+        body: JSON.stringify({ 
+          url,
+          input_type,
+          screenshots,
+          figma_url,
+          figma_token,
+          enhance_analysis
+        }),
         signal: AbortSignal.timeout(5000),
       });
 
@@ -671,7 +768,8 @@ export const AuditProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           sender: 'coach',
           text: data.reply,
           timestamp: new Date().toLocaleTimeString(),
-          codeBlocks: data.codeBlocks
+          codeBlocks: data.codeBlocks,
+          pipelineLog: data.pipelineLog
         }));
         return;
       }
@@ -800,7 +898,13 @@ export const AuditProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         coachMessages,
         startAudit,
         sendCoachMessage,
-        generateFixForIssue
+        generateFixForIssue,
+        user,
+        isAuthenticated,
+        login,
+        loginWithGoogle,
+        loginWithGithub,
+        logout
       }}
     >
       {children}

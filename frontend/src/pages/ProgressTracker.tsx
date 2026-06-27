@@ -108,7 +108,7 @@ const ProgressTracker: React.FC = () => {
                 <div className="flex flex-wrap gap-4">
                   <div><p className="text-[10px] text-slate-500">UX</p><p className="font-bold text-white">{audit.uxScore}</p></div>
                   <div><p className="text-[10px] text-slate-500">A11y</p><p className="font-bold text-white">{audit.a11yScore}</p></div>
-                  <div><p className="text-[10px] text-slate-500">Pages</p><p className="font-bold text-white">{audit.totalPages}</p></div>
+                  <div><p className="text-[10px] text-slate-500">Pages</p><p className="font-bold text-white">{audit.unique_pages ?? audit.pages?.length ?? audit.totalPages}</p></div>
                   <div><p className="text-[10px] text-slate-500">Critical</p><p className="font-bold text-red-400">{audit.criticalCount}</p></div>
                   {audit.resolvedIssuesCount > 0 && (
                     <div><p className="text-[10px] text-slate-500">Resolved</p><p className="font-bold text-emerald-400">{audit.resolvedIssuesCount}</p></div>

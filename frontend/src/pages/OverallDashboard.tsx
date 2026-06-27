@@ -48,7 +48,7 @@ const OverallDashboard: React.FC = () => {
     { label: 'Overall Score',   value: activeAudit.overallScore,   icon: BarChart3,     color: 'from-blue-500 to-violet-500',   unit: '/100' },
     { label: 'UX Score',        value: activeAudit.uxScore,        icon: Zap,           color: 'from-violet-500 to-purple-600', unit: '/100' },
     { label: 'Accessibility',   value: activeAudit.a11yScore,      icon: Shield,        color: 'from-emerald-500 to-teal-600',  unit: '/100' },
-    { label: 'Unique Pages',    value: activeAudit.totalPages,     icon: Globe,         color: 'from-sky-500 to-blue-600',      unit: '' },
+    { label: 'Unique Pages',    value: activeAudit.unique_pages ?? activeAudit.pages?.length ?? activeAudit.totalPages,     icon: Globe,         color: 'from-sky-500 to-blue-600',      unit: '' },
     { label: 'Critical Issues', value: activeAudit.criticalCount,  icon: AlertTriangle, color: 'from-red-500 to-rose-600',      unit: '' },
     { label: 'Avg Page Score',  value: Math.round(activeAudit.pages.reduce((s, p) => s + p.uxScore, 0) / Math.max(1, activeAudit.pages.length)), icon: TrendingUp, color: 'from-amber-500 to-orange-600', unit: '/100' },
   ];
@@ -78,6 +78,55 @@ const OverallDashboard: React.FC = () => {
           </motion.div>
         ))}
       </div>
+
+      {/* Screenshot-Based Insights Card */}
+      {activeAudit.source === 'screenshot' && (
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}
+          className="glass-card p-6 rounded-2xl border border-blue-500/20 bg-blue-950/5">
+          <div className="flex items-center gap-3 mb-4">
+            <Zap className="text-blue-400" size={20} />
+            <h2 className="text-lg font-bold text-white">Screenshot-Based Insights</h2>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-4">
+              <div>
+                <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Detected UI Type</p>
+                <p className="text-lg font-bold text-blue-300 mt-0.5 capitalize">{(activeAudit as any).layout_type || 'landing page'}</p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider mb-2">Visible UI Components</p>
+                <div className="flex flex-wrap gap-2">
+                  {((activeAudit as any).components || []).map((comp: any, idx: number) => (
+                    <span key={idx} className="px-3 py-1 rounded-lg text-xs font-semibold bg-white/5 border border-white/10 text-slate-300">
+                      {comp.label} ({comp.type})
+                    </span>
+                  ))}
+                  {!((activeAudit as any).components) || (activeAudit as any).components.length === 0 && (
+                    <span className="text-xs text-slate-500 italic">No components indexed.</span>
+                  )}
+                </div>
+              </div>
+            </div>
+            
+            <div className="space-y-4">
+              <div>
+                <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider mb-2">Key Usability & Accessibility Issues</p>
+                <div className="space-y-2">
+                  {activeAudit.pages.flatMap(p => [...p.uxIssues, ...p.a11yIssues]).slice(0, 3).map((iss, idx) => (
+                    <div key={idx} className="p-3 rounded-xl bg-slate-900/50 border border-white/[0.04] flex items-start gap-2.5">
+                      <AlertTriangle size={14} className="text-amber-400 mt-0.5 flex-shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold text-white truncate">{iss.description}</p>
+                        <p className="text-[10px] text-slate-500 mt-0.5">Component: {iss.element} | Severity: {iss.severity}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </motion.div>
+      )}
 
       {/* Score Rings */}
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="glass-card p-6 rounded-2xl">

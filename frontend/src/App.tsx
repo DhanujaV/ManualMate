@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { AuditProvider, useAudit } from './context/AuditContext';
 import Sidebar from './components/Sidebar';
 import LandingPage from './pages/LandingPage';
+import LoginPage from './pages/LoginPage';
 import AuditDashboard from './pages/AuditDashboard';
 import OverallDashboard from './pages/OverallDashboard';
 import SiteStructure from './pages/SiteStructure';
@@ -21,11 +22,19 @@ const pageVariants = {
 };
 
 const AppContent: React.FC = () => {
-  const { activeTab } = useAudit();
+  const { activeTab, isAuthenticated } = useAudit();
 
   const renderPage = () => {
+    // Restrict authenticated dashboard routes
+    const isPublicTab = activeTab === 'landing' || activeTab === 'login';
+    
+    if (!isAuthenticated && !isPublicTab) {
+      return <LoginPage />;
+    }
+
     switch (activeTab) {
       case 'landing':     return <LandingPage />;
+      case 'login':       return <LoginPage />;
       case 'auditor':     return <AuditDashboard />;
       case 'overall':     return <OverallDashboard />;
       case 'structure':   return <SiteStructure />;
@@ -40,13 +49,13 @@ const AppContent: React.FC = () => {
     }
   };
 
-  const isLanding = activeTab === 'landing';
+  const showSidebar = isAuthenticated && activeTab !== 'landing' && activeTab !== 'login';
 
   return (
     <div className="flex h-screen overflow-hidden">
-      {!isLanding && <Sidebar />}
+      {showSidebar && <Sidebar />}
       <main
-        className={`flex-1 overflow-y-auto ${isLanding ? 'w-full' : ''}`}
+        className={`flex-1 overflow-y-auto ${!showSidebar ? 'w-full' : ''}`}
         style={activeTab === 'coach' ? { display: 'flex', flexDirection: 'column' } : {}}
       >
         <AnimatePresence mode="wait">

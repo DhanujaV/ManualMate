@@ -35,16 +35,53 @@ class Database:
     def _init_fallback_file(self):
         if not os.path.exists(FALLBACK_FILE):
             with open(FALLBACK_FILE, "w") as f:
-                json.dump({"audits": [], "pages": []}, f, indent=2)
+                json.dump({"audits": [], "pages": [], "users": []}, f, indent=2)
             logger.info(f"Created fallback database file: {FALLBACK_FILE}")
 
     def _read_fallback(self) -> Dict[str, List[Dict[str, Any]]]:
         try:
             with open(FALLBACK_FILE, "r") as f:
-                return json.load(f)
+                data = json.load(f)
+                if "users" not in data:
+                    data["users"] = []
+                return data
         except Exception as e:
             logger.error(f"Error reading fallback database: {e}")
-            return {"audits": [], "pages": []}
+            return {"audits": [], "pages": [], "users": []}
+
+    # --- User Operations ---
+    def save_user(self, user: Dict[str, Any]) -> str:
+        if not self.use_fallback:
+            try:
+                self.db.users.replace_one({"email": user["email"]}, user, upsert=True)
+                return user["email"]
+            except Exception as e:
+                logger.error(f"MongoDB save_user failed: {e}. Writing to fallback.")
+                
+        data = self._read_fallback()
+        exists = False
+        for idx, item in enumerate(data["users"]):
+            if item["email"] == user["email"]:
+                data["users"][idx] = user
+                exists = True
+                break
+        if not exists:
+            data["users"].append(user)
+        self._write_fallback(data)
+        return user["email"]
+
+    def get_user(self, email: str) -> Optional[Dict[str, Any]]:
+        if not self.use_fallback:
+            try:
+                return self.db.users.find_one({"email": email}, {"_id": 0})
+            except Exception as e:
+                logger.error(f"MongoDB get_user failed: {e}. Reading from fallback.")
+                
+        data = self._read_fallback()
+        for item in data["users"]:
+            if item["email"] == email:
+                return item
+        return None
 
     def _write_fallback(self, data: Dict[str, List[Dict[str, Any]]]):
         try:

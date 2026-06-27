@@ -38,8 +38,11 @@ const BusinessImpact: React.FC = () => {
 
   const tooltipStyle = { background: 'rgba(15,23,42,0.95)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', color: '#e2e8f0', fontSize: '12px' };
 
+  const baselineRevenue = 60000;
+  const growthPercent = (totalRevenue / baselineRevenue) * 100;
+
   const summaryCards = [
-    { label: 'Est. Monthly Revenue Lift', value: `$${totalRevenue.toLocaleString()}`,     icon: DollarSign,        color: 'from-emerald-500 to-teal-600',   sub: 'across all pages' },
+    { label: 'Projected Revenue Growth',  value: `+${growthPercent.toFixed(1)}%`,          icon: DollarSign,        color: 'from-emerald-500 to-teal-600',   sub: 'Projected increase after implementing recommended UX improvements.' },
     { label: 'Avg Conversion Lift',       value: `+${avgConversion.toFixed(1)}%`,          icon: MousePointerClick, color: 'from-blue-500 to-indigo-600',    sub: 'with recommended fixes' },
     { label: 'CSAT Improvement',          value: `+${avgCsat.toFixed(1)}%`,                icon: Heart,             color: 'from-rose-500 to-pink-600',      sub: 'projected satisfaction gain' },
     { label: 'Highest Impact Page',       value: topPage?.path ?? '/',                     icon: TrendingUp,        color: 'from-violet-500 to-purple-600',  sub: `$${topPage?.businessImpact.estimated_monthly_revenue_lift.toLocaleString()} lift` },

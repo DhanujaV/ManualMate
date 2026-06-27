@@ -79,10 +79,18 @@ class AuditRecord(BaseModel):
     resolvedIssuesCount: int
     historyScores: List[HistoryScore]
     pages: List[PageRecord]
+    source: Optional[str] = "url"
+    unique_pages: Optional[int] = None
+
 
 
 class AuditStartRequest(BaseModel):
-    url: str
+    url: Optional[str] = None
+    input_type: str = "url"  # "url" | "screenshot" | "figma"
+    screenshots: Optional[List[str]] = None  # Base64 image list
+    figma_url: Optional[str] = None
+    figma_token: Optional[str] = None
+    enhance_analysis: Optional[bool] = False
 
 
 class CoachChatRequest(BaseModel):
@@ -102,3 +110,15 @@ class ProgressEvent(BaseModel):
     percent: int
     estimated_time: str
     error: Optional[str] = None
+
+
+class UserRegisterRequest(BaseModel):
+    email: str
+    password: str
+    name: str
+
+
+class UserLoginRequest(BaseModel):
+    email: str
+    password: str
+

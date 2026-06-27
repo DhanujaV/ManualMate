@@ -6,6 +6,7 @@ Emits real-time progress events via an async queue (consumed by WebSocket).
 import asyncio
 import logging
 import time
+import uuid
 from typing import Any, Callable, Coroutine, Dict, List, Optional
 
 from crawler import crawl_async
@@ -22,14 +23,29 @@ logger = logging.getLogger("uxverse.orchestrator")
 
 class AuditOrchestrator:
     """
-    Runs the full 7-agent audit pipeline for a given URL.
+    Runs the full 7-agent audit pipeline for a given URL or Screenshot list.
     Emits ProgressEvent-shaped dicts to a caller-supplied async queue.
     """
 
-    def __init__(self, audit_id: str, url: str, event_queue: asyncio.Queue):
+    def __init__(
+        self, 
+        audit_id: str, 
+        url: str, 
+        event_queue: asyncio.Queue,
+        input_type: str = "url",
+        screenshots: Optional[List[str]] = None,
+        figma_url: Optional[str] = None,
+        figma_token: Optional[str] = None,
+        enhance_analysis: Optional[bool] = False
+    ):
         self.audit_id = audit_id
         self.url = url
         self.q = event_queue
+        self.input_type = input_type
+        self.screenshots = screenshots
+        self.figma_url = figma_url
+        self.figma_token = figma_token
+        self.enhance_analysis = enhance_analysis
         self.start_time = time.time()
 
         # Agent singletons
@@ -45,6 +61,9 @@ class AuditOrchestrator:
     async def run(self) -> Dict[str, Any]:
         """Execute the full pipeline. Returns completed AuditRecord dict."""
         try:
+            if self.input_type == "screenshot":
+                return await self._run_screenshot_pipeline()
+
             # 1. Crawl
             pages_raw = await self._phase_crawl()
 
@@ -65,6 +84,135 @@ class AuditOrchestrator:
             logger.error(f"Orchestrator error: {exc}", exc_info=True)
             await self._emit_error(str(exc))
             raise
+
+    async def _run_screenshot_pipeline(self) -> Dict[str, Any]:
+        from screenshot_parser import screenshot_parser
+        
+        await self._emit("progress", 5, "Vision Agent — Loading uploaded screenshots", "", 0, 0)
+        
+        # 1. Run screenshot parser
+        screenshots = self.screenshots or []
+        res = await screenshot_parser.parse_screenshots(screenshots, self.enhance_analysis)
+        
+        await self._emit("progress", 30, "Vision Agent — Performing visual understanding and feature extraction", "", len(screenshots), 0)
+        
+        # Map visual structure to pages
+        pages_audited = []
+        issues = res.get("issues", [])
+        
+        for idx, img_b64 in enumerate(screenshots):
+            await self._emit("progress", 40 + int((idx / len(screenshots)) * 30), "Vision Agent — Parsing layout coordinates and text hierarchies", f"Screenshot {idx+1}", len(screenshots), idx)
+            
+            # Filter issues matching this screenshot
+            prefix = f"Screenshot {idx+1} -"
+            page_issues = []
+            for issue in issues:
+                if issue.get("location", "").startswith(prefix):
+                    clean_iss = dict(issue)
+                    clean_iss["location"] = clean_iss["location"].replace(prefix, "").strip()
+                    page_issues.append(clean_iss)
+                    
+            ux_issues = []
+            a11y_issues = []
+            
+            for iss in page_issues:
+                issue_rec = {
+                    "id": f"screenshot-{iss.get('type')}-{uuid.uuid4().hex[:6]}",
+                    "severity": iss.get("severity", "Warning").capitalize(),
+                    "description": f"{iss.get('description')} [Screenshot Evidence]",
+                    "recommendation": self._get_screenshot_rec(iss),
+                    "element": iss.get("location", "visible component"),
+                    "heuristic": self._get_screenshot_heuristic(iss) if iss.get("type") in ("heuristic", "visual", "spacing", "layout") else None,
+                    "standard": self._get_screenshot_standard(iss) if iss.get("type") in ("contrast", "accessibility") else None,
+                }
+                if iss.get("type") in ("contrast", "accessibility"):
+                    a11y_issues.append(issue_rec)
+                else:
+                    ux_issues.append(issue_rec)
+                    
+            ux_score = self._compute_score(ux_issues)
+            a11y_score = self._compute_score(a11y_issues)
+            
+            personas = self.persona_agent.analyze(ux_issues, a11y_issues, ux_score, a11y_score)
+            biz_impact = self.business_agent.analyze(ux_issues, a11y_issues, f"/screenshot-{idx+1}")
+            before_after = self.improvement_agent.generate("", ux_issues, a11y_issues)
+            
+            boxes = []
+            for jdx, iss in enumerate(ux_issues + a11y_issues):
+                boxes.append({
+                    "issue_id": iss["id"],
+                    "severity": iss["severity"],
+                    "label": iss["element"],
+                    "x": 100 + jdx * 50,
+                    "y": 150 + jdx * 60,
+                    "width": 120,
+                    "height": 45
+                })
+
+            pages_audited.append({
+                "url": f"Screenshot {idx+1}",
+                "path": f"/screenshot-{idx+1}",
+                "parent_path": "",
+                "title": f"Screenshot Viewport {idx+1}",
+                "uxScore": ux_score,
+                "a11yScore": a11y_score,
+                "uxIssues": ux_issues,
+                "a11yIssues": a11y_issues,
+                "personas": personas,
+                "businessImpact": biz_impact,
+                "beforeAfter": before_after,
+                "screenshotBoxes": boxes,
+                "screenshot_b64": img_b64,
+            })
+
+        if not pages_audited:
+            pages_audited.append({
+                "url": "Screenshot 1",
+                "path": "/screenshot-1",
+                "parent_path": "",
+                "title": "Screenshot Viewport 1",
+                "uxScore": res.get("ux_score", 100),
+                "a11yScore": res.get("accessibility_score", 100),
+                "uxIssues": [],
+                "a11yIssues": [],
+                "personas": [],
+                "businessImpact": {"conversion_lift_percentage": 0, "estimated_monthly_revenue_lift": 0, "csat_lift_percentage": 0, "development_effort": "Low"},
+                "beforeAfter": {"before": {"html": "", "css": "", "visual": ""}, "after": {"html": "", "css": "", "visual": ""}},
+                "screenshotBoxes": [],
+                "screenshot_b64": "",
+            })
+
+        await self._emit("progress", 85, "Prioritization Agent — Sorting and ranking visual insights", "", len(screenshots), len(screenshots))
+        
+        audit_record = self._aggregate(pages_audited)
+        audit_record["source"] = "screenshot"
+        audit_record["layout_type"] = res.get("ui_structure", {}).get("layout_type", "landing page")
+        audit_record["components"] = res.get("ui_structure", {}).get("components", [])
+
+        db.save_audit(audit_record)
+
+        await self._emit("complete", 100, "Screenshot analysis complete", "", len(pages_audited), len(pages_audited))
+        return audit_record
+
+    def _get_screenshot_rec(self, issue: dict) -> str:
+        t = issue.get("type", "")
+        if t == "contrast":
+            return "Modify background or text properties to satisfy WCAG AA standards (minimum contrast ratio of 4.5:1)."
+        elif t == "accessibility":
+            return "Ensure every visual control has programmatically linked labels and correct alt attributes."
+        elif t == "layout":
+            return "Optimize alignment offsets and adjust white space margins."
+        return "Implement design consistency rules across components."
+
+    def _get_screenshot_heuristic(self, issue: dict) -> str:
+        return "Heuristic #8: Aesthetic and Minimalist Design"
+
+    def _get_screenshot_standard(self, issue: dict) -> str:
+        t = issue.get("type", "")
+        if t == "contrast":
+            return "WCAG 2.2 AA - 1.4.3 Contrast (Minimum)"
+        return "WCAG 2.2 A - 1.3.1 Info and Relationships"
+
 
     # ── Phase 1: Crawl ────────────────────────────────────────────────────────
 
@@ -169,6 +317,7 @@ class AuditOrchestrator:
                 "beforeAfter": before_after,
                 "screenshotBoxes": boxes,
                 "screenshot_b64": page.get("screenshot_b64"),
+                "html": html,
             })
 
             await self._emit("progress", min(99, 40 + int(((idx + 1) / max(1, total)) * 55)),
@@ -206,6 +355,7 @@ class AuditOrchestrator:
             "uxScore": avg_ux,
             "a11yScore": avg_a11y,
             "totalPages": len(pages),
+            "unique_pages": len(pages),
             "criticalCount": critical,
             "warningCount": warning,
             "minorCount": minor,
