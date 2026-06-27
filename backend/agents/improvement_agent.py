@@ -1,10 +1,14 @@
 """
-Improvement Agent — Real UX Code Transformation Engine.
-Extracts actual problematic HTML snippets from audited pages and generates
-gorgeous developer-grade fixed versions using Tailwind CSS and WCAG rules.
+Improvement Agent — Real UX Code Transformation Engine (Multi-Issue version).
+Generates multiple corrections per page and formats them to the new data model:
+{
+  "page_url": page_url,
+  "issues": [ { id, title, severity, element_selector, before_html, after_html, after_css, ux_fix_explanation, accessibility_fix_notes } ]
+}
 """
 import re
 import logging
+import uuid
 from typing import Dict, Any, List
 from bs4 import BeautifulSoup
 
@@ -12,41 +16,57 @@ logger = logging.getLogger("uxverse.improvement_agent")
 
 
 class ImprovementAgent:
-    """Generates real-time before/after HTML, CSS, and AI reasoning from page elements."""
+    """Generates real-time multi-issue UX and accessibility code corrections."""
 
-    def generate(self, html: str, ux_issues: List[Dict], a11y_issues: List[Dict]) -> Dict[str, Any]:
+    def generate(self, page_url: str, html: str, ux_issues: List[Dict], a11y_issues: List[Dict]) -> Dict[str, Any]:
         """
-        Takes the most severe issue detected on the page and performs a real code transformation.
-        Falls back to a structural best-practice template only if no issues are detected.
+        Processes all detected UX and accessibility issues on the page.
+        Returns a list of corrections ordered by severity priority.
         """
+        # Sort issues: Critical accessibility violations first, then UX blocking, then others
         all_issues = sorted(
             a11y_issues + ux_issues,
-            key=lambda x: {"Critical": 0, "Warning": 1, "Minor": 2}.get(x.get("severity", "Minor"), 2)
+            key=self._get_issue_priority
         )
 
-        if not all_issues:
-            return self._default_improvement()
+        issues_list = []
+        soup = BeautifulSoup(html, "html.parser") if html else None
 
-        # Target the primary issue for code transformation
-        primary_issue = all_issues[0]
-        issue_id = primary_issue.get("id", "")
-        element_snippet = primary_issue.get("element", "")
-        description = primary_issue.get("description", "Detected usability barrier on the page.")
-        recommendation = primary_issue.get("recommendation", "Refactor interface layout according to standards.")
+        for issue in all_issues:
+            elem_snippet = issue.get("element", "")
+            issue_id = issue.get("id", "")
+            desc = issue.get("description", "")
+            rec = issue.get("recommendation", "")
 
-        # If element is empty or generic, try searching the BeautifulSoup DOM for matching tags
-        if not element_snippet or element_snippet in ("<img>", "<input>", "<form>", "<button>", "<a>"):
-            element_snippet = self._extract_matching_dom_element(html, issue_id)
+            # If element tag placeholder, look up candidate in DOM
+            if not elem_snippet or elem_snippet in ("<img>", "<input>", "<form>", "<button>", "<a>"):
+                elem_snippet = self._extract_matching_dom_element(soup, issue_id)
 
-        # Run programmatic code transformation
-        return self._transform_snippet_programmatically(element_snippet, issue_id, description, recommendation)
+            correction = self._transform_single_issue(issue, elem_snippet)
+            issues_list.append(correction)
 
-    def _extract_matching_dom_element(self, html: str, issue_id: str) -> str:
-        """Helper to find the first candidate element in HTML source code matching issue type."""
-        if not html:
+        return {
+            "page_url": page_url,
+            "issues": issues_list
+        }
+
+    def _get_issue_priority(self, issue: Dict) -> int:
+        """Sort priority key: Critical a11y (0) -> Critical UX (1) -> Warning a11y (2) -> Warning UX (3) -> Minor (4)"""
+        sev = issue.get("severity", "Minor")
+        is_a11y = "wcag" in issue.get("id", "").lower() or "standard" in issue
+        
+        if sev == "Critical":
+            return 0 if is_a11y else 1
+        elif sev == "Warning":
+            return 2 if is_a11y else 3
+        else:
+            return 4
+
+    def _extract_matching_dom_element(self, soup: BeautifulSoup, issue_id: str) -> str:
+        """Finds the first candidate element in HTML source code matching issue type."""
+        if not soup:
             return ""
         try:
-            soup = BeautifulSoup(html, "html.parser")
             if "1.1.1" in issue_id or "alt" in issue_id:
                 img = soup.find("img", alt=False)
                 if img:
@@ -67,52 +87,73 @@ class ImprovementAgent:
             logger.warn(f"Failed to extract matching DOM element: {e}")
         return ""
 
-    def _transform_snippet_programmatically(self, elem: str, issue_id: str, desc: str, rec: str) -> Dict[str, Any]:
+    def _guess_selector(self, elem_html: str) -> str:
+        """Generates a representative element selector guess from the HTML tag."""
+        if not elem_html:
+            return "body"
+        try:
+            if elem_html.startswith("<"):
+                tag_name = elem_html[1:].split()[0].replace(">", "")
+                match_id = re.search(r'id="([^"]+)"', elem_html)
+                if match_id:
+                    return f"#{match_id.group(1)}"
+                match_class = re.search(r'class="([^"]+)"', elem_html)
+                if match_class:
+                    first_class = match_class.group(1).split()[0]
+                    return f"{tag_name}.{first_class}"
+                match_src = re.search(r'src="([^"]+)"', elem_html)
+                if match_src:
+                    return f'{tag_name}[src="{match_src.group(1)}"]'
+                return tag_name
+        except Exception:
+            pass
+        return "div"
+
+    def _transform_single_issue(self, issue: Dict, elem_html: str) -> Dict[str, Any]:
         """Core engine that modifies unoptimized HTML snippets to compliant production-ready code."""
-        # Clean clean element placeholder fallback
-        before_html = elem.strip() if elem else '<button class="btn">Submit</button>'
-        
-        # Strip comments
+        issue_id = issue.get("id", f"ux-issue-{uuid.uuid4().hex[:6]}")
+        desc = issue.get("description", "Detected usability barrier on the page.")
+        rec = issue.get("recommendation", "Refactor element according to usability standards.")
+        sev = issue.get("severity", "Warning")
+        title = issue.get("standard") or issue.get("heuristic") or "Usability Enhancement"
+
+        before_html = elem_html.strip() if elem_html else '<button class="btn">Submit</button>'
         before_html = re.sub(r'<!--.*?-->', '', before_html).strip()
         after_html = before_html
+        after_css = "/* Default styling rules */"
+        ux_fix_explanation = desc
+        a11y_notes = None
 
-        # 1. WCAG 1.1.1: Missing alt text
+        # 1. WCAG 1.1.1: Alt Text
         if "1.1.1" in issue_id or "alt" in desc.lower():
             if "<img" in before_html:
-                # Inject alt text dynamically
                 if 'alt="' not in before_html:
                     after_html = before_html.replace("<img", '<img alt="Visual showcase representing system workspace dashboard interface"')
                 else:
                     after_html = re.sub(r'alt="[^"]*"', 'alt="Visual showcase representing system workspace dashboard interface"', before_html)
-                
-                # Add modern rounded/border styles
                 if 'class="' in after_html:
                     after_html = after_html.replace('class="', 'class="rounded-2xl border border-slate-200/50 dark:border-white/10 ')
                 else:
                     after_html = after_html.replace("<img", '<img class="rounded-2xl border border-slate-200/50 dark:border-white/10"')
             else:
-                # Image element fallback template
                 before_html = '<img src="/assets/hero.jpg" class="w-full">'
                 after_html = '<img src="/assets/hero.jpg" alt="Team members working on UI audit optimization" class="w-full rounded-2xl border border-white/10">'
             
-            before_css = "/* Image lacks screen reader descriptions */\nimg {\n  display: block;\n  max-width: 100%;\n}"
-            after_css = "/* Clear margins and focusable outlines */\nimg {\n  display: block;\n  max-width: 100%;\n}\nimg:focus-visible {\n  outline: 3px solid #3b82f6;\n  outline-offset: 3px;\n}"
-            reasoning = "Adding descriptive alt attributes ensures screen reader devices can announce image content, improving WCAG compliance and page layout context representation."
+            after_css = "/* Clear margins and focusable outlines */\nimg:focus-visible {\n  outline: 3px solid #3b82f6;\n  outline-offset: 3px;\n}"
+            ux_fix_explanation = "Injects alternative descriptions so screen readers can describe image contents to visually-impaired users."
+            a11y_notes = "Resolves WCAG 2.2 A - 1.1.1 Non-text Content (Level A) criteria."
 
-        # 2. WCAG 1.3.1: Missing input label
+        # 2. WCAG 1.3.1: Form labels
         elif "1.3.1" in issue_id or "label" in desc.lower():
             input_id = "field-input"
-            # Try parsing ID from element
             match_id = re.search(r'id="([^"]+)"', before_html)
             if match_id:
                 input_id = match_id.group(1)
             else:
-                # Inject ID for linkage
                 before_html = before_html.replace("<input", f'<input id="{input_id}"', 1)
             
-            # Create a wrapped modern label structure
             placeholder_match = re.search(r'placeholder="([^"]+)"', before_html)
-            label_text = placeholder_match.group(1).title() if placeholder_match else "Workspace Field"
+            label_text = placeholder_match.group(1).title() if placeholder_match else "Workspace Input"
 
             after_html = (
                 f'<div class="flex flex-col gap-2 w-full max-w-sm">\n'
@@ -122,11 +163,11 @@ class ImprovementAgent:
                 f'  {before_html.replace("<input", "<input class=\\\"w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/[0.02] text-slate-900 dark:text-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 outline-none transition-all duration-200\\\"", 1)}\n'
                 f'</div>'
             )
-            before_css = "/* Input missing associated label */\ninput {\n  border: 1px solid #d1d5db;\n  padding: 8px;\n}"
-            after_css = "/* Premium layout container and focus transition */\n.flex {\n  display: flex;\n}\ninput:focus-visible {\n  border-color: #3b82f6;\n  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.1);\n}"
-            reasoning = "Explicitly binding label tags to form elements via 'for' attributes ensures screen readers announce input field context. Visible labels prevent cognitive load under Nielsen Heuristic: Error Prevention."
+            after_css = "/* Labeled form layout styling */\ninput:focus-visible {\n  border-color: #3b82f6;\n  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.1);\n}"
+            ux_fix_explanation = "Binds label elements to input blocks, ensuring screen readers announce form context automatically."
+            a11y_notes = "Resolves WCAG 2.2 A - 1.3.1 Info and Relationships (Level A)."
 
-        # 3. WCAG 2.4.7: Focus visible outline
+        # 3. WCAG 2.4.7: Focus Outlines
         elif "2.4.7" in issue_id or "focus" in desc.lower() or "outline" in desc.lower():
             if "class=" in before_html:
                 after_html = before_html.replace('class="', 'class="focus-visible:ring-4 focus-visible:ring-blue-500/20 focus-visible:border-blue-500 outline-none transition-all ')
@@ -134,12 +175,12 @@ class ImprovementAgent:
                 after_html = before_html.replace("<button", '<button class="focus-visible:ring-4 focus-visible:ring-blue-500/20 focus-visible:border-blue-500 outline-none transition-all"')
                 after_html = after_html.replace("<a", '<a class="focus-visible:ring-4 focus-visible:ring-blue-500/20 focus-visible:border-blue-500 outline-none transition-all"')
             
-            before_css = "/* Standard outline removal breaks focus visibility */\n*:focus {\n  outline: none;\n}"
-            after_css = "/* visible outlines exclusively for keyboard navigators */\n*:focus:not(:focus-visible) {\n  outline: none;\n}\n*:focus-visible {\n  outline: 3px solid #3b82f6;\n  outline-offset: 3px;\n}"
-            reasoning = "Clear focus-visible outline indicators guide keyboard-only users, satisfying WCAG 2.4.7 AA compliance without cluttering standard mouse-click states."
+            after_css = "/* focus-visible rings for keyboard tabbing */\n*:focus:not(:focus-visible) {\n  outline: none;\n}\n*:focus-visible {\n  outline: 3px solid #3b82f6;\n  outline-offset: 3px;\n}"
+            ux_fix_explanation = "Provides bright, high-contrast outlines for keyboard users, leaving standard mouse clicks clean."
+            a11y_notes = "Resolves WCAG 2.2 AA - 2.4.7 Focus Visible (Level AA)."
 
-        # 4. Nielsen H1: Visibility of System Status (loading feedback)
-        elif "h1" in issue_id.lower() or "loading" in desc.lower() or "spinner" in desc.lower():
+        # 4. Nielsen H1: Visibility of System Status (loading spinners)
+        elif "h1" in issue_id.lower() or "loading" in desc.lower():
             after_html = (
                 f'<button \n'
                 f'  type="submit"\n'
@@ -154,72 +195,50 @@ class ImprovementAgent:
                 f'  <span>Processing...</span>\n'
                 f'</button>'
             )
-            before_css = "/* Button without busy/loading states */\nbutton {\n  background: #2563eb;\n  color: #fff;\n}"
-            after_css = "/* Disabled state reduction transition */\nbutton:disabled {\n  opacity: 0.7;\n  cursor: not-allowed;\n}"
-            reasoning = "Displaying immediate feedback on action submit prevents duplicate requests and reassures users under Nielsen Heuristic: Visibility of System Status."
+            after_css = "/* Loading spin animations and disabled states */\nbutton:disabled {\n  opacity: 0.7;\n  cursor: not-allowed;\n}"
+            ux_fix_explanation = "Renders dynamic loading feedback during submit actions, preventing redundant click actions."
+            a11y_notes = "Implements Nielsen Heuristic #1: Visibility of System Status."
 
-        # 5. Nielsen H8: Aesthetic and Minimalist Design (cluttered CTAs)
-        elif "h8" in issue_id.lower() or "cta" in desc.lower() or "clutter" in desc.lower():
+        # 5. Nielsen H8: CTA hierarchy
+        elif "h8" in issue_id.lower() or "cta" in desc.lower():
             before_html = (
                 '<div class="cta-bar">\n'
                 '  <button class="btn">Sign Up</button>\n'
                 '  <button class="btn">Learn More</button>\n'
-                '  <button class="btn">Watch Video</button>\n'
                 '</div>'
             )
             after_html = (
                 '<div class="flex flex-col sm:flex-row gap-4 items-center">\n'
-                '  <!-- Primary Action -->\n'
                 '  <button class="w-full sm:w-auto bg-gradient-to-r from-blue-600 to-violet-600 text-white font-bold px-6 py-3.5 rounded-xl hover:shadow-lg transition-all">\n'
                 '    Get Started Free\n'
                 '  </button>\n'
-                '  <!-- Secondary Action -->\n'
                 '  <button class="w-full sm:w-auto border border-slate-200 dark:border-white/10 text-slate-800 dark:text-slate-300 font-semibold px-6 py-3.5 rounded-xl hover:bg-white/[0.04] transition-all">\n'
                 '    Watch Demo\n'
                 '  </button>\n'
                 '</div>'
             )
-            before_css = ".btn {\n  background: #3b82f6;\n  color: white;\n  padding: 10px 16px;\n  margin: 4px;\n}"
-            after_css = "/* Clear visual hierarchy weights */\n.bg-gradient-to-r {\n  box-shadow: 0 4px 14px rgba(59, 130, 246, 0.15);\n}"
-            reasoning = "Minimizing competing primary call-to-actions down to a single dominant CTA reduces user decision paralysis and increases conversion by up to 25% under Nielsen Heuristic: Aesthetic and Minimalist Design."
+            after_css = "/* Primary vs secondary layout weights */\n.bg-gradient-to-r {\n  box-shadow: 0 4px 14px rgba(59, 130, 246, 0.15);\n}"
+            ux_fix_explanation = "Establishes a single dominant action with secondary links to prevent choice paralysis."
+            a11y_notes = "Implements Nielsen Heuristic #8: Aesthetic and Minimalist Design."
 
-        # 6. Fallback/Generic: Add accessible classes and transition wrappers
+        # 6. Fallback/Generic: Add accessible classes
         else:
             if "class=" in before_html:
                 after_html = before_html.replace('class="', 'class="hover:scale-[1.01] transition-all duration-200 ')
             else:
                 after_html = before_html.replace(">", ' class="hover:scale-[1.01] transition-all duration-200">', 1)
-            
-            before_css = "/* Element lacks interactive micro-transitions */"
-            after_css = "/* Added transform scales and shadow-glow properties */\n.hover\\:scale-\\[1\\.01\\]:hover {\n  transform: scale(1.01);\n}"
-            reasoning = f"Applying optimization parameters resolves visual friction and aligns the element behavior with standard guidelines."
+            after_css = "/* Transition transform classes */"
+            ux_fix_explanation = f"Applies transition transforms and border-styles: {rec}"
+            a11y_notes = "Implements design consistency fixes."
 
         return {
-            "before": {
-                "html": before_html,
-                "css": before_css,
-                "visual": desc,
-            },
-            "after": {
-                "html": after_html,
-                "css": after_css,
-                "visual": rec,
-            },
-            "reasoning": reasoning
-        }
-
-    def _default_improvement(self) -> Dict[str, Any]:
-        """General best-practice fallback template."""
-        return {
-            "before": {
-                "html": '<!-- Bad UX / Accessibility standard template -->\n<nav>\n  <a href="/home" style="margin: 5px;">Home</a>\n  <button class="btn" style="outline: none;">Start</button>\n</nav>',
-                "css": "nav { display: block; }\n.btn { background: #3b82f6; }",
-                "visual": "Navigation links lack visible focus rings, have inadequate link hover states, and button labels have no hover transitions.",
-            },
-            "after": {
-                "html": '<!-- WCAG & Nielsen optimized hierarchy -->\n<nav class="flex gap-6 items-center px-4 py-3 bg-slate-900/30 rounded-xl border border-white/5">\n  <a href="/home" class="text-sm font-semibold text-slate-400 hover:text-white transition-colors">Home</a>\n  <button class="bg-gradient-to-r from-blue-600 to-purple-600 text-white font-bold px-4 py-2.5 rounded-xl hover:scale-105 transition-all outline-none focus-visible:ring-4 focus-visible:ring-blue-500/25" aria-label="Start Audit Workspace">\n    Start Audit\n  </button>\n</nav>',
-                "css": "/* visible focus indicators outline style */\n*:focus:not(:focus-visible) {\n  outline: none;\n}\n*:focus-visible {\n  outline: 3px solid #3b82f6;\n  outline-offset: 3px;\n}",
-                "visual": "Refactored layout. Added semantic structures, hover transitions, flex alignments, and full keyboard-focusable rings.",
-            },
-            "reasoning": "Improved spacing increases readability by 18% and reduces cognitive load based on Nielsen heuristic: Aesthetic and Minimalist Design."
+            "id": issue_id,
+            "title": title,
+            "severity": sev,
+            "element_selector": self._guess_selector(before_html),
+            "before_html": before_html,
+            "after_html": after_html,
+            "after_css": after_css,
+            "ux_fix_explanation": ux_fix_explanation,
+            "accessibility_fix_notes": a11y_notes
         }

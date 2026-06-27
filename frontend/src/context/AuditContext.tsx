@@ -82,10 +82,21 @@ export interface BusinessImpactRecord {
   development_effort: 'High' | 'Medium' | 'Low';
 }
 
+export interface UXCorrection {
+  id: string;
+  title: string;
+  severity: 'Critical' | 'Warning' | 'Minor';
+  element_selector: string;
+  before_html: string;
+  after_html: string;
+  after_css: string;
+  ux_fix_explanation: string;
+  accessibility_fix_notes?: string;
+}
+
 export interface BeforeAfterRecord {
-  before: { html: string; css: string; visual: string };
-  after: { html: string; css: string; visual: string };
-  reasoning?: string;
+  page_url: string;
+  issues: UXCorrection[];
 }
 
 export interface BoundingBoxRecord {
@@ -381,16 +392,27 @@ export const AuditProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       });
       if (response.ok) {
         const data = await response.json();
-        // Update active audit page record before/after
+        // Update active audit page record before/after issues
         setActiveAudit(prev => {
           if (!prev) return prev;
           const updatedPages = prev.pages.map(p => {
             if (p.url === pageUrl) {
+              const updatedIssues = p.beforeAfter.issues.map(iss => {
+                if (iss.id === issueId) {
+                  return {
+                    ...iss,
+                    before_html: data.before?.html || data.before || iss.before_html,
+                    after_html: data.after?.html || data.after || iss.after_html,
+                    ux_fix_explanation: data.reasoning || data.after?.visual || iss.ux_fix_explanation
+                  };
+                }
+                return iss;
+              });
               return {
                 ...p,
                 beforeAfter: {
-                  before: data.before,
-                  after: data.after
+                  ...p.beforeAfter,
+                  issues: updatedIssues
                 }
               };
             }
@@ -403,21 +425,32 @@ export const AuditProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         if (selectedPage && selectedPage.url === pageUrl) {
           setSelectedPage(prev => {
             if (!prev) return prev;
+            const updatedIssues = prev.beforeAfter.issues.map(iss => {
+              if (iss.id === issueId) {
+                return {
+                  ...iss,
+                  before_html: data.before?.html || data.before || iss.before_html,
+                  after_html: data.after?.html || data.after || iss.after_html,
+                  ux_fix_explanation: data.reasoning || data.after?.visual || iss.ux_fix_explanation
+                };
+              }
+              return iss;
+            });
             return {
               ...prev,
               beforeAfter: {
-                before: data.before,
-                after: data.after
+                ...prev.beforeAfter,
+                issues: updatedIssues
               }
             };
           });
         }
       }
     } catch (e) {
-      console.warn("Backend fixes API offline. Triggering local layout fix simulation.");
+      console.warn("Backend fixes API offline.");
     }
 
-    // Direct client tab jump to Before vs After view to let user review code!
+    // Direct client tab jump to Before vs After view
     setActiveTab('beforeafter');
   };
 

@@ -150,7 +150,7 @@ class AuditOrchestrator:
             await self._emit("progress", base_pct + 5,
                              "AI Improvement Agent — Generating before/after code fixes",
                              page_url, total, idx)
-            before_after = self.improvement_agent.generate(html, ux_issues, a11y_issues)
+            before_after = self.improvement_agent.generate(page_url, html, ux_issues, a11y_issues)
 
             # --- Bounding boxes (from issue elements) ---
             boxes = self._generate_bounding_boxes(ux_issues + a11y_issues)

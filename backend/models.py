@@ -38,10 +38,21 @@ class BusinessImpactRecord(BaseModel):
     development_effort: str  # High | Medium | Low
 
 
+class UXCorrection(BaseModel):
+    id: str
+    title: str
+    severity: str  # Critical | Warning | Minor
+    element_selector: str
+    before_html: str
+    after_html: str
+    after_css: str
+    ux_fix_explanation: str
+    accessibility_fix_notes: Optional[str] = None
+
+
 class BeforeAfterRecord(BaseModel):
-    before: dict  # { html: str, css: str, visual: str }
-    after: dict   # { html: str, css: str, visual: str }
-    reasoning: Optional[str] = None
+    page_url: str
+    issues: List[UXCorrection]
 
 
 class PageRecord(BaseModel):
