@@ -60,13 +60,15 @@ export interface IssueRecord {
   id: string;
   page_url: string;
   element_selector: string;
-  issue_type: string;
+  element_type: string;
+  proof_source: ('DOM' | 'AXE' | 'VISION' | 'PLAYWRIGHT' | 'CSS')[];
+  confidence: number;
   severity: 'Critical' | 'Warning' | 'Minor';
-  proof_source: ('DOM' | 'AXE' | 'VISION')[];
-  evidence_snippet: string;
-  before_html: string;
+  screenshot_reference?: string;
+  html_snippet: string;
+  css_snippet: string;
+  reasoning: string;
   recommended_fix: string;
-  ux_reasoning: string;
 
   // Backwards compatibility mappings
   element?: string;
@@ -74,6 +76,10 @@ export interface IssueRecord {
   recommendation: string;
   standard?: string;
   heuristic?: string;
+  issue_type?: string;
+  evidence_snippet?: string;
+  before_html?: string;
+  ux_reasoning?: string;
 }
 
 export interface PersonaRecord {

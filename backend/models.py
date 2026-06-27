@@ -6,13 +6,15 @@ class IssueRecord(BaseModel):
     id: str
     page_url: str
     element_selector: str
-    issue_type: str
+    element_type: str
+    proof_source: List[str]  # ["DOM", "AXE", "VISION", "PLAYWRIGHT", "CSS"]
+    confidence: int  # 0-100
     severity: str  # Critical | Warning | Minor
-    proof_source: List[str]  # ["DOM", "AXE", "VISION"]
-    evidence_snippet: str
-    before_html: str
+    screenshot_reference: Optional[str] = None
+    html_snippet: str
+    css_snippet: str
+    reasoning: str
     recommended_fix: str
-    ux_reasoning: str
 
     # Backwards compatibility mappings
     element: Optional[str] = None
@@ -20,6 +22,10 @@ class IssueRecord(BaseModel):
     recommendation: Optional[str] = None
     standard: Optional[str] = None
     heuristic: Optional[str] = None
+    issue_type: Optional[str] = None
+    evidence_snippet: Optional[str] = None
+    before_html: Optional[str] = None
+    ux_reasoning: Optional[str] = None
 
 
 class BoundingBoxRecord(BaseModel):
