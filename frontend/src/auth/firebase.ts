@@ -8,14 +8,26 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID || "",
 };
 
-// Initialize Firebase (safeguard hot reloads)
-const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
-const auth = getAuth(app);
-const googleProvider = new GoogleAuthProvider();
+let auth: any = null;
+let googleProvider: any = null;
+let firebaseInitialized = false;
 
-// Apply browser session persistence
-setPersistence(auth, browserLocalPersistence).catch((err) => {
-  console.error("Firebase Auth persistence configuration error:", err);
-});
+if (firebaseConfig.apiKey && firebaseConfig.apiKey !== "undefined" && firebaseConfig.apiKey !== "") {
+  try {
+    const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
+    auth = getAuth(app);
+    googleProvider = new GoogleAuthProvider();
+    setPersistence(auth, browserLocalPersistence).catch((err) => {
+      console.error("Firebase Auth persistence configuration error:", err);
+    });
+    firebaseInitialized = true;
+  } catch (err) {
+    console.error("Failed to initialize Firebase Auth:", err);
+  }
+}
 
-export { auth, googleProvider };
+if (!firebaseInitialized) {
+  console.warn("Firebase configuration is missing or invalid. Authentication is running in simulation mode.");
+}
+
+export { auth, googleProvider, firebaseInitialized };
