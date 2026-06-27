@@ -8,14 +8,14 @@ import logging
 import time
 from typing import Any, Callable, Coroutine, Dict, List, Optional
 
-from crawler import crawl_async
-from agents.a11y_agent import A11yAgent
-from agents.ux_agent import UXAgent
-from agents.persona_agent import PersonaAgent
-from agents.business_agent import BusinessAgent
-from agents.priority_agent import PriorityAgent
-from agents.improvement_agent import ImprovementAgent
-from database import db
+from backend.crawler import crawl_async
+from backend.agents.a11y_agent import A11yAgent
+from backend.agents.ux_agent import UXAgent
+from backend.agents.persona_agent import PersonaAgent
+from backend.agents.business_agent import BusinessAgent
+from backend.agents.priority_agent import PriorityAgent
+from backend.agents.improvement_agent import ImprovementAgent
+from backend.database import db
 
 logger = logging.getLogger("uxverse.orchestrator")
 
